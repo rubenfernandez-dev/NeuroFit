@@ -10,6 +10,8 @@ export type MentalMathState = {
   wrong: number;
   timeLeft: number;
   inputValue: string;
+  sessionStarted?: boolean;
+  didFinish?: boolean;
   difficulty: Difficulty;
   isDaily?: boolean;
   dailyDateISO?: string;

@@ -7,7 +7,7 @@ export const GAMES: GameDefinition[] = [
     subtitle: 'Lógica y concentración en cuadrícula 9x9',
     icon: '🧩',
     routeName: 'Sudoku',
-    difficulties: ['easy', 'medium', 'hard', 'expert'],
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
     enabled: true,
   },
   {
@@ -16,7 +16,7 @@ export const GAMES: GameDefinition[] = [
     subtitle: 'Entrena memoria visual y velocidad',
     icon: '🃏',
     routeName: 'Memory',
-    difficulties: ['easy', 'medium', 'hard'],
+    difficulties: ['principiante', 'avanzado', 'experto'],
     enabled: true,
   },
   {
@@ -25,7 +25,7 @@ export const GAMES: GameDefinition[] = [
     subtitle: 'Cálculo mental bajo presión de tiempo',
     icon: '➗',
     routeName: 'MentalMath',
-    difficulties: ['easy', 'medium', 'hard'],
+    difficulties: ['principiante', 'avanzado', 'experto'],
     enabled: true,
   },
 ];

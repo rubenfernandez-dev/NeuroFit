@@ -10,8 +10,8 @@ export type MemoryCardModel = {
 const symbols = ['🐶', '🐱', '🦊', '🐼', '🐸', '🐵', '🦁', '🐰', '🐷', '🐙', '🐢', '🦄', '🐝', '🦋', '🐧', '🐬', '🦖', '🐞'];
 
 export function getBoardSize(difficulty: Difficulty): { cols: number; rows: number } {
-  if (difficulty === 'easy') return { cols: 4, rows: 4 };
-  if (difficulty === 'medium') return { cols: 6, rows: 4 };
+  if (difficulty === 'principiante') return { cols: 4, rows: 4 };
+  if (difficulty === 'avanzado') return { cols: 6, rows: 4 };
   return { cols: 6, rows: 6 };
 }
 

@@ -33,6 +33,7 @@ export default function Button({ title, onPress, variant = 'primary', disabled, 
       ]}
     >
       <Text
+        numberOfLines={1}
         style={[
           styles.label,
           {
@@ -49,6 +50,7 @@ export default function Button({ title, onPress, variant = 'primary', disabled, 
 const styles = StyleSheet.create({
   base: {
     minHeight: 46,
+    minWidth: 0,
     borderWidth: 1,
     borderRadius: 14,
     alignItems: 'center',
@@ -59,5 +61,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
+    flexShrink: 1,
   },
 });

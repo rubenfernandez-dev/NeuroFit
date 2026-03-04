@@ -7,10 +7,13 @@ export type Level = {
 
 export const LEVELS: Level[] = [
   { id: 'bronze', name: 'Bronze', minXp: 0, badgeEmoji: '🥉' },
-  { id: 'silver', name: 'Silver', minXp: 400, badgeEmoji: '🥈' },
-  { id: 'gold', name: 'Gold', minXp: 1000, badgeEmoji: '🥇' },
-  { id: 'platinum', name: 'Platinum', minXp: 2200, badgeEmoji: '🏆' },
-  { id: 'diamond', name: 'Diamond', minXp: 4000, badgeEmoji: '💎' },
+  { id: 'silver', name: 'Silver', minXp: 2000, badgeEmoji: '🥈' },
+  { id: 'gold', name: 'Gold', minXp: 6000, badgeEmoji: '🥇' },
+  { id: 'platinum', name: 'Platinum', minXp: 14000, badgeEmoji: '🏆' },
+  { id: 'diamond', name: 'Diamond', minXp: 30000, badgeEmoji: '💎' },
+  { id: 'master', name: 'Master', minXp: 55000, badgeEmoji: '🧠' },
+  { id: 'grandmaster', name: 'Grandmaster', minXp: 90000, badgeEmoji: '🔥' },
+  { id: 'legend', name: 'Legend', minXp: 140000, badgeEmoji: '👑' },
 ];
 
 export function getLevelByXp(xp: number): Level {

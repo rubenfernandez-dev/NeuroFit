@@ -9,6 +9,8 @@ export type MemoryState = {
   matched: number[];
   attempts: number;
   elapsedMs: number;
+  sessionStarted?: boolean;
+  didFinish?: boolean;
   difficulty: Difficulty;
   isDaily?: boolean;
   dailyDateISO?: string;

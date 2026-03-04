@@ -2,22 +2,24 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../app/routes';
-import { Difficulty } from '../types';
+import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { generateQuestions } from './logic/questions';
 import HUD from './components/HUD';
 import Button from '../../shared/ui/Button';
 import Card from '../../shared/ui/Card';
 import { useAppTheme } from '../../shared/theme/theme';
 import { clearMentalMathState, getMentalMathState, saveMentalMathState } from './storage/mentalmathState';
-import { recordSession } from '../../shared/storage/stats';
+import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { grantXp } from '../../shared/gamification/xp';
-import { markDailyCompleted } from '../../shared/storage/daily';
+import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
+import { claimDailyReward, markDailyCompleted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
 export default function MentalMathScreen({ route }: Props) {
   const { theme } = useAppTheme();
-  const difficulty = (route.params?.difficulty ?? 'medium') as Difficulty;
+  const difficulty = normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty;
   const isDaily = !!route.params?.isDaily;
   const dailyDateISO = route.params?.dailyDateISO;
   const dailySeed = route.params?.dailySeed;
@@ -28,6 +30,8 @@ export default function MentalMathScreen({ route }: Props) {
   const [wrong, setWrong] = useState(0);
   const [timeLeft, setTimeLeft] = useState(60);
   const [inputValue, setInputValue] = useState('');
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [didFinish, setDidFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
 
   useEffect(() => {
@@ -47,6 +51,12 @@ export default function MentalMathScreen({ route }: Props) {
         setWrong(saved.wrong);
         setTimeLeft(saved.timeLeft);
         setInputValue(saved.inputValue);
+        setSessionStarted(Boolean(saved.sessionStarted));
+        setDidFinish(Boolean(saved.didFinish));
+        if (!saved.sessionStarted) {
+          await trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
+          setSessionStarted(true);
+        }
         return;
       }
 
@@ -57,6 +67,9 @@ export default function MentalMathScreen({ route }: Props) {
       setWrong(0);
       setTimeLeft(60);
       setInputValue('');
+      setSessionStarted(true);
+      setDidFinish(false);
+      await trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
     };
 
     init();
@@ -80,23 +93,79 @@ export default function MentalMathScreen({ route }: Props) {
       wrong,
       timeLeft,
       inputValue,
+      sessionStarted,
+      didFinish,
       difficulty,
       isDaily,
       dailyDateISO,
       seed: dailySeed,
     });
-  }, [questions, currentIndex, correct, wrong, timeLeft, inputValue, difficulty, isDaily, dailyDateISO, dailySeed]);
+  }, [questions, currentIndex, correct, wrong, timeLeft, inputValue, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed]);
 
   const current = useMemo(() => questions[currentIndex % questions.length], [questions, currentIndex]);
 
   const finish = async () => {
-    if (finishing) return;
+    if (finishing || didFinish) return;
     setFinishing(true);
-    await recordSession({ gameId: 'mentalmath', difficulty, durationMs: 60000, score: correct, won: true });
-    const { earnedXp } = await grantXp({ gameId: 'mentalmath', difficulty, won: true, durationMs: 60000, score: correct });
-    if (isDaily) await markDailyCompleted();
+    setDidFinish(true);
+    await trackWin({
+      gameId: 'mentalmath',
+      mode: isDaily ? 'daily' : 'normal',
+      difficulty,
+      durationMs: 60000,
+      score: correct,
+    });
+    let earnedXp = 0;
+    let earnedSp = 0;
+
+    if (isDaily) {
+      await markDailyCompleted();
+      const { alreadyClaimed } = await claimDailyReward();
+      if (!alreadyClaimed) {
+        const profile = await getProfile();
+        const xpResult = await grantXp({
+          gameId: 'mentalmath',
+          difficulty,
+          won: true,
+          durationMs: 60000,
+          score: correct,
+          mode: 'daily',
+          streakCurrent: profile.streakCurrent,
+        });
+        earnedXp = xpResult.earnedXp;
+
+        const spResult = await grantSeasonPoints({
+          gameId: 'mentalmath',
+          difficulty,
+          durationMs: 60000,
+          isDaily: true,
+          dailyCompletedAndClaimable: true,
+        });
+        earnedSp = spResult.earnedSeasonPoints;
+      }
+    } else {
+      const xpResult = await grantXp({
+        gameId: 'mentalmath',
+        difficulty,
+        won: true,
+        durationMs: 60000,
+        score: correct,
+        mode: 'normal',
+      });
+      earnedXp = xpResult.earnedXp;
+
+      const spResult = await grantSeasonPoints({
+        gameId: 'mentalmath',
+        difficulty,
+        durationMs: 60000,
+        isDaily: false,
+      });
+      earnedSp = spResult.earnedSeasonPoints;
+    }
+
     await clearMentalMathState();
-    Alert.alert('Sesión terminada', `Aciertos: ${correct} · +${earnedXp} XP`);
+    setSessionStarted(false);
+    Alert.alert('Sesión terminada', `Aciertos: ${correct} · +${earnedXp} XP · +${earnedSp} SP`);
     setFinishing(false);
   };
 
@@ -129,6 +198,9 @@ export default function MentalMathScreen({ route }: Props) {
     setWrong(0);
     setTimeLeft(60);
     setInputValue('');
+    setDidFinish(false);
+    setSessionStarted(true);
+    trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
   };
 
   return (
@@ -136,7 +208,7 @@ export default function MentalMathScreen({ route }: Props) {
       <HUD timeLeft={timeLeft} correct={correct} wrong={wrong} />
 
       <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Pregunta</Text>
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Mental Math · {difficultyLabel(difficulty)}</Text>
         <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
         <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Respuesta: {inputValue || '...'}</Text>
       </Card>

@@ -12,6 +12,7 @@ export type RootStackParamList = {
   Home: undefined;
   Games: undefined;
   DailyChallenge: undefined;
+  Leaderboard: undefined;
   Progress: undefined;
   Settings: undefined;
   Sudoku: GameRouteParams | undefined;
