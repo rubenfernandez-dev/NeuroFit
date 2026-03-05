@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Modal, ScrollView, Text, View } from 'react-native';
+import { Alert, Modal, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -15,9 +15,12 @@ import { msToClock } from '../../shared/utils/time';
 import { trackGameOver, trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { grantXp } from '../../shared/gamification/xp';
 import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, markDailyCompleted } from '../../shared/storage/daily';
+import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
 import { getProfile } from '../../shared/storage/profile';
 import { SudokuCellPosition, SudokuHistoryEntry } from './model/types';
+import Screen from '../../shared/ui/Screen';
+import Pill from '../../shared/ui/Pill';
+import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -33,9 +36,11 @@ type VictorySummary = {
 
 export default function SudokuScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
-  const isDaily = !!route.params?.isDaily;
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
   const dailyDateISO = route.params?.dailyDateISO;
   const dailySeed = route.params?.dailySeed;
+  const stageIndex = route.params?.stageIndex;
   const hasPresetDifficulty = isDaily || !!route.params?.difficulty;
 
   const [difficulty, setDifficulty] = useState<Difficulty>(normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty);
@@ -58,9 +63,19 @@ export default function SudokuScreen({ route, navigation }: Props) {
   const [victorySummary, setVictorySummary] = useState<VictorySummary | null>(null);
   const [showErrors, setShowErrors] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(92);
+  const [controlsHeight, setControlsHeight] = useState(250);
 
   const selectedRow = Math.floor(selectedIndex / 9);
   const selectedCol = selectedIndex % 9;
+  const compactLayout = windowHeight <= 700 || windowWidth <= 360;
+  const horizontalPadding = theme.spacing.lg * 2;
+  const verticalPadding = theme.spacing.lg * 2;
+  const availableBoardHeight = Math.max(180, windowHeight - verticalPadding - headerHeight - controlsHeight - 20);
+  const boardSize = Math.max(180, Math.floor(Math.min(windowWidth - horizontalPadding, availableBoardHeight)));
+  const keypadButtonSize = compactLayout ? 40 : 50;
+  const controlsGap = compactLayout ? 6 : 8;
 
   const flattenGrid = (rows: number[][]) => rows.flat();
   const cloneGrid = (rows: number[][]) => rows.map((row) => [...row]);
@@ -77,6 +92,29 @@ export default function SudokuScreen({ route, navigation }: Props) {
     let mounted = true;
 
     const init = async () => {
+      if (isDaily) {
+        const daily = await ensureDailyToday();
+        const expectedStage = daily.stages[daily.currentStageIndex];
+
+        if (daily.completed) {
+          setDailyBlockedReason('Reto diario ya completado, vuelve mañana.');
+          Alert.alert('Reto diario completado', 'Reto diario ya completado, vuelve mañana.');
+          return;
+        }
+
+        if (!expectedStage || expectedStage.gameId !== 'sudoku') {
+          setDailyBlockedReason('Esta etapa no está activa. Continúa el circuito desde Reto diario.');
+          return;
+        }
+
+        if (typeof stageIndex === 'number' && stageIndex !== daily.currentStageIndex) {
+          setDailyBlockedReason('Esta etapa ya no está activa. Continúa desde Reto diario.');
+          return;
+        }
+
+        await markDailyStageStarted({ stageIndex, gameId: 'sudoku' });
+      }
+
       const saved = await getSudokuState();
       if (
         saved &&
@@ -131,13 +169,13 @@ export default function SudokuScreen({ route, navigation }: Props) {
     return () => {
       mounted = false;
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed, difficultyConfirmed]);
+  }, [difficulty, isDaily, dailyDateISO, dailySeed, difficultyConfirmed, stageIndex]);
 
   useEffect(() => {
-    if (grid.length !== 9 || gameOver || didWin) return;
+    if (!sessionStarted || grid.length !== 9 || gameOver || didWin || !!dailyBlockedReason) return;
     const timer = setInterval(() => setElapsedMs((prev) => prev + 1000), 1000);
     return () => clearInterval(timer);
-  }, [grid.length, gameOver, didWin]);
+  }, [sessionStarted, grid.length, gameOver, didWin, dailyBlockedReason]);
 
   useEffect(() => {
     if (!lastErrorCell) return;
@@ -199,32 +237,85 @@ export default function SudokuScreen({ route, navigation }: Props) {
     let earnedSp = 0;
 
     if (isDaily) {
-      await markDailyCompleted();
-      const { alreadyClaimed } = await claimDailyReward();
-      if (!alreadyClaimed) {
-        const profile = await getProfile();
-        const xpResult = await grantXp({
+      const stageResult = await completeDailyStage({
+        stageIndex,
+        gameId: 'sudoku',
+        difficulty,
+        result: {
+          durationMs: elapsedMs,
+          mistakes,
+          score: 100,
+        },
+      });
+
+      if (stageResult.stageCompletedNow) {
+        await updateNeuroAfterGame({
           gameId: 'sudoku',
           difficulty,
           won: true,
           durationMs: elapsedMs,
           score: 100,
-          mode: 'daily',
-          streakCurrent: profile.streakCurrent,
-        });
-        earnedXp = xpResult.earnedXp;
-
-        const spResult = await grantSeasonPoints({
-          gameId: 'sudoku',
-          difficulty,
           mistakes,
-          durationMs: elapsedMs,
-          isDaily: true,
-          dailyCompletedAndClaimable: true,
+          mode: 'daily',
         });
-        earnedSp = spResult.earnedSeasonPoints;
       }
+
+      if (stageResult.circuitCompletedNow) {
+        const { alreadyClaimed } = await claimDailyReward();
+        if (!alreadyClaimed) {
+          const profile = await getProfile();
+          const xpResult = await grantXp({
+            gameId: 'sudoku',
+            difficulty,
+            won: true,
+            durationMs: elapsedMs,
+            score: 100,
+            mode: 'daily',
+            streakCurrent: profile.streakCurrent,
+          });
+          earnedXp = xpResult.earnedXp;
+
+          const spResult = await grantSeasonPoints({
+            gameId: 'sudoku',
+            difficulty,
+            mistakes,
+            durationMs: elapsedMs,
+            isDaily: true,
+            dailyCompletedAndClaimable: true,
+          });
+          earnedSp = spResult.earnedSeasonPoints;
+        }
+      }
+
+      const progress = getDailyProgress(stageResult.daily);
+      await clearSudokuState();
+      setSessionStarted(false);
+      setFinishing(false);
+
+      const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
+      const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
+      navigation.replace('DailyChallenge', {
+        completion: {
+          kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
+          stageIndex: completedStageIndex,
+          earnedXp,
+          earnedSp,
+          result: savedResult,
+          progress,
+        },
+      });
+      return;
     } else {
+      await updateNeuroAfterGame({
+        gameId: 'sudoku',
+        difficulty,
+        won: true,
+        durationMs: elapsedMs,
+        score: 100,
+        mistakes,
+        mode: 'normal',
+      });
+
       const xpResult = await grantXp({
         gameId: 'sudoku',
         difficulty,
@@ -253,6 +344,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
   };
 
   const toggleNote = (row: number, col: number, value: number) => {
+    if (dailyBlockedReason) return;
     if (value < 1 || value > 9) return;
     if (givens[row]?.[col] || gameOver || didWin) return;
 
@@ -267,6 +359,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
   };
 
   const setNumber = async (value: number) => {
+    if (dailyBlockedReason) return;
     if (givens[selectedRow]?.[selectedCol] || gameOver || didWin) return;
 
     if (noteMode && value !== 0) {
@@ -314,6 +407,15 @@ export default function SudokuScreen({ route, navigation }: Props) {
 
     if (nextGameOver) {
       await trackGameOver({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal', difficulty, durationMs: elapsedMs, mistakes: nextMistakes });
+      await updateNeuroAfterGame({
+        gameId: 'sudoku',
+        difficulty,
+        won: false,
+        durationMs: elapsedMs,
+        score: 0,
+        mistakes: nextMistakes,
+        mode: isDaily ? 'daily' : 'normal',
+      });
       setSessionStarted(false);
       showGameOverAlert();
       return;
@@ -323,6 +425,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
   };
 
   const undoLastMove = () => {
+    if (dailyBlockedReason) return;
     if (history.length === 0 || didWin) return;
 
     const last = history[history.length - 1];
@@ -343,6 +446,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
   };
 
   const clearCell = async () => {
+    if (dailyBlockedReason) return;
     if (givens[selectedRow]?.[selectedCol] || gameOver || didWin) return;
 
     if (noteMode) {
@@ -371,6 +475,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
   };
 
   const handleNew = () => {
+    if (isDaily && !gameOver) return;
     const generated = getPuzzle(difficulty, isDaily ? dailySeed : undefined);
     const initialState = createInitialSudokuState(generated.puzzle);
     setPuzzle(generated.puzzle);
@@ -415,8 +520,8 @@ export default function SudokuScreen({ route, navigation }: Props) {
 
   if (!difficultyConfirmed) {
     return (
-      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-        <Card>
+      <Screen scroll={false} contentStyle={{ flex: 1, justifyContent: 'center' }}>
+        <Card variant="primary">
           <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Elige dificultad</Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>Selecciona el nivel para iniciar Sudoku.</Text>
         </Card>
@@ -434,59 +539,94 @@ export default function SudokuScreen({ route, navigation }: Props) {
         </View>
 
         <Button title="Empezar" onPress={() => setDifficultyConfirmed(true)} />
-      </ScrollView>
+      </Screen>
     );
   }
 
   return (
     <>
-      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-        <Card>
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Sudoku · {difficultyLabel(difficulty)}</Text>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Tiempo: {msToClock(elapsedMs)} {isDaily ? '· Daily' : ''}
-          </Text>
-          <Text style={{ color: mistakes >= 4 ? theme.colors.danger : theme.colors.textMuted, marginTop: 6 }}>Fallos: {mistakes}/{MAX_MISTAKES}</Text>
-          {gameOver ? <Text style={{ color: theme.colors.danger, marginTop: 4 }}>Entrada bloqueada por límite de fallos.</Text> : null}
-        </Card>
-
-        {grid.length === 9 ? (
-          <SudokuGrid
-            grid={grid}
-            notes={notes}
-            givens={givens}
-            selectedIndex={selectedIndex}
-            conflicts={conflicts}
-            errorCell={lastErrorCell}
-            locked={gameOver || didWin}
-            onSelect={setSelectedIndex}
-          />
-        ) : (
-          <Text style={{ color: theme.colors.textMuted }}>Cargando puzzle...</Text>
-        )}
-
-        <Keypad onInput={setNumber} onClear={clearCell} disabled={gameOver || didWin} clearDisabled={!canClear} />
-
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button
-            title="✏️ Notas"
-            variant={noteMode ? 'primary' : 'secondary'}
-            onPress={() => setNoteMode((prev) => !prev)}
-            disabled={gameOver || didWin}
-            style={{ flex: 1 }}
-          />
-          <Button title="↩ Undo" variant="ghost" onPress={undoLastMove} disabled={history.length === 0 || didWin} style={{ flex: 1 }} />
+      <Screen scroll={false} contentStyle={{ flex: 1, gap: compactLayout ? 8 : theme.spacing.md }}>
+        <View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+          <Card variant="cyan" style={{ padding: compactLayout ? 12 : 16 }}>
+            <Text style={[theme.typography.h3, { color: theme.colors.text }]} numberOfLines={1}>Sudoku · {difficultyLabel(difficulty)}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 8 }}>
+              <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+              <Text style={{ color: mistakes >= 4 ? theme.colors.danger : theme.colors.textMuted, fontSize: compactLayout ? 12 : 14 }} numberOfLines={1}>Fallos: {mistakes}/{MAX_MISTAKES}</Text>
+            </View>
+            <Text style={{ color: theme.colors.textMuted, marginTop: 4, fontSize: compactLayout ? 12 : 14 }} numberOfLines={1}>
+              Tiempo: {msToClock(elapsedMs)} {isDaily ? '· Daily' : ''}
+            </Text>
+            {gameOver ? <Text style={{ color: theme.colors.danger, marginTop: 2, fontSize: 12 }} numberOfLines={2}>Entrada bloqueada por límite de fallos.</Text> : null}
+          </Card>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button title="Nuevo" onPress={handleNew} disabled={isDaily && !gameOver} style={{ flex: 1 }} />
-          <Button title="Comprobar" variant="secondary" onPress={checkBoard} disabled={grid.length !== 9 || finishing || didWin} style={{ flex: 1 }} />
+        {dailyBlockedReason ? (
+          <Card>
+            <Text style={[theme.typography.body, { color: theme.colors.warning }]}>{dailyBlockedReason}</Text>
+            <View style={{ marginTop: 10 }}>
+              <Button title="Volver al reto diario" onPress={() => navigation.navigate('DailyChallenge')} />
+            </View>
+          </Card>
+        ) : null}
+
+        <View style={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }}>
+          {!dailyBlockedReason && grid.length === 9 ? (
+            <SudokuGrid
+              size={boardSize}
+              grid={grid}
+              notes={notes}
+              givens={givens}
+              selectedIndex={selectedIndex}
+              conflicts={conflicts}
+              errorCell={lastErrorCell}
+              locked={gameOver || didWin}
+              onSelect={setSelectedIndex}
+            />
+          ) : !dailyBlockedReason ? (
+            <Text style={{ color: theme.colors.textMuted }}>Cargando puzzle...</Text>
+          ) : null}
         </View>
 
-        <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>
-          Validación: inmediata por celda al introducir número; “Comprobar” revisa globalmente el tablero.
-        </Text>
-      </ScrollView>
+        {!dailyBlockedReason ? (
+        <View onLayout={(event) => setControlsHeight(event.nativeEvent.layout.height)}>
+          <Card style={{ padding: compactLayout ? 10 : 14 }}>
+            <Keypad
+              onInput={setNumber}
+              onClear={clearCell}
+              disabled={gameOver || didWin}
+              clearDisabled={!canClear}
+              compact={compactLayout}
+              buttonSize={keypadButtonSize}
+              gap={controlsGap}
+              showClear={false}
+            />
+
+          <View style={{ flexDirection: 'row', gap: controlsGap, marginTop: controlsGap }}>
+            <Button
+              title="✏️ Notas"
+              variant={noteMode ? 'primary' : 'secondary'}
+              onPress={() => setNoteMode((prev) => !prev)}
+              disabled={gameOver || didWin}
+              style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }}
+            />
+            <Button title="↩ Undo" variant="ghost" onPress={undoLastMove} disabled={history.length === 0 || didWin} style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }} />
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: controlsGap, marginTop: controlsGap }}>
+            <Button title="Borrar" variant="secondary" onPress={clearCell} disabled={gameOver || didWin || !canClear} style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }} />
+            <Button title="Comprobar" variant="secondary" onPress={checkBoard} disabled={grid.length !== 9 || finishing || didWin} style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }} />
+          </View>
+          </Card>
+        </View>
+        ) : null}
+
+        <Button
+          title={isDaily ? 'Reintentar etapa' : 'Nuevo'}
+          onPress={handleNew}
+          disabled={(isDaily && !gameOver) || !!dailyBlockedReason}
+          style={{ minHeight: compactLayout ? 40 : 46 }}
+        />
+      </Screen>
 
       <Modal visible={victoryVisible} transparent animationType="fade" onRequestClose={() => setVictoryVisible(false)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: theme.spacing.lg }}>

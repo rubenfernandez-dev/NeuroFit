@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useAppTheme } from '../../../shared/theme/theme';
 
 type SudokuCellProps = {
+  size: number;
   value: number;
   notes: number[];
   fixed: boolean;
@@ -16,6 +17,7 @@ type SudokuCellProps = {
 };
 
 export default function SudokuCell({
+  size,
   value,
   notes,
   fixed,
@@ -29,6 +31,10 @@ export default function SudokuCell({
 }: SudokuCellProps) {
   const { theme } = useAppTheme();
   const notesSet = new Set(notes);
+  const valueFontSize = Math.max(12, Math.floor(size * 0.5));
+  const noteFontSize = Math.max(6, Math.floor(size * 0.18));
+  const noteLineHeight = Math.max(8, Math.floor(size * 0.24));
+  const notesBoxSize = Math.max(18, Math.floor(size * 0.82));
   const backgroundColor = error
     ? theme.colors.danger
     : selected
@@ -45,8 +51,8 @@ export default function SudokuCell({
     <Pressable
       onPress={onPress}
       style={{
-        width: 34,
-        height: 34,
+        width: size,
+        height: size,
         borderWidth: 0.5,
         borderColor: theme.colors.border,
         alignItems: 'center',
@@ -59,13 +65,13 @@ export default function SudokuCell({
           style={{
             color: error || conflict ? theme.colors.surface : fixed ? theme.colors.text : theme.colors.primary,
             fontWeight: fixed ? '700' : '500',
-            fontSize: 16,
+            fontSize: valueFontSize,
           }}
         >
           {value}
         </Text>
       ) : notes.length > 0 ? (
-        <View style={{ width: 28, height: 28, flexDirection: 'row', flexWrap: 'wrap' }}>
+        <View style={{ width: notesBoxSize, height: notesBoxSize, flexDirection: 'row', flexWrap: 'wrap' }}>
           {Array.from({ length: 9 }).map((_, index) => {
             const num = index + 1;
             return (
@@ -74,8 +80,8 @@ export default function SudokuCell({
                 style={{
                   width: '33.33%',
                   textAlign: 'center',
-                  fontSize: 8,
-                  lineHeight: 10,
+                  fontSize: noteFontSize,
+                  lineHeight: noteLineHeight,
                   color: theme.colors.textMuted,
                 }}
               >

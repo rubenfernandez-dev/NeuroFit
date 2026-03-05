@@ -16,7 +16,7 @@ export const GAMES: GameDefinition[] = [
     subtitle: 'Entrena memoria visual y velocidad',
     icon: '🃏',
     routeName: 'Memory',
-    difficulties: ['principiante', 'avanzado', 'experto'],
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
     enabled: true,
   },
   {
@@ -25,7 +25,16 @@ export const GAMES: GameDefinition[] = [
     subtitle: 'Cálculo mental bajo presión de tiempo',
     icon: '➗',
     routeName: 'MentalMath',
-    difficulties: ['principiante', 'avanzado', 'experto'],
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
+    enabled: true,
+  },
+  {
+    id: 'speedmatch',
+    title: 'Speed Match',
+    subtitle: 'Decide rápido si el símbolo coincide',
+    icon: '⚡',
+    routeName: 'SpeedMatch',
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
     enabled: true,
   },
 ];

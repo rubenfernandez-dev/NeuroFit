@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -13,17 +13,21 @@ import { msToClock } from '../../shared/utils/time';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { grantXp } from '../../shared/gamification/xp';
 import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, markDailyCompleted } from '../../shared/storage/daily';
+import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
 import { getProfile } from '../../shared/storage/profile';
+import Screen from '../../shared/ui/Screen';
+import Pill from '../../shared/ui/Pill';
+import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
-export default function MemoryScreen({ route }: Props) {
+export default function MemoryScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
   const difficulty = normalizeDifficulty(route.params?.difficulty, 'principiante') as Difficulty;
-  const isDaily = !!route.params?.isDaily;
+  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
   const dailyDateISO = route.params?.dailyDateISO;
   const dailySeed = route.params?.dailySeed;
+  const stageIndex = route.params?.stageIndex;
 
   const [cards, setCards] = useState<ReturnType<typeof buildDeck>>([]);
   const [flipped, setFlipped] = useState<number[]>([]);
@@ -34,12 +38,35 @@ export default function MemoryScreen({ route }: Props) {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [didFinish, setDidFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
 
   const { cols } = getBoardSize(difficulty);
 
   useEffect(() => {
     let mounted = true;
     const init = async () => {
+      if (isDaily) {
+        const daily = await ensureDailyToday();
+        const expectedStage = daily.stages[daily.currentStageIndex];
+        if (daily.completed) {
+          setDailyBlockedReason('Reto diario ya completado, vuelve mañana.');
+          Alert.alert('Reto diario completado', 'Reto diario ya completado, vuelve mañana.');
+          return;
+        }
+
+        if (!expectedStage || expectedStage.gameId !== 'memory') {
+          setDailyBlockedReason('Esta etapa no está activa. Continúa el circuito desde Reto diario.');
+          return;
+        }
+
+        if (typeof stageIndex === 'number' && stageIndex !== daily.currentStageIndex) {
+          setDailyBlockedReason('Esta etapa ya no está activa. Continúa desde Reto diario.');
+          return;
+        }
+
+        await markDailyStageStarted({ stageIndex, gameId: 'memory' });
+      }
+
       const saved = await getMemoryState();
       if (
         saved &&
@@ -78,13 +105,13 @@ export default function MemoryScreen({ route }: Props) {
     return () => {
       mounted = false;
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed]);
+  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex]);
 
   useEffect(() => {
-    if (cards.length === 0) return;
+    if (!sessionStarted || cards.length === 0 || didFinish || dailyBlockedReason) return;
     const timer = setInterval(() => setElapsedMs((prev) => prev + 1000), 1000);
     return () => clearInterval(timer);
-  }, [cards.length]);
+  }, [sessionStarted, cards.length, didFinish, dailyBlockedReason]);
 
   useEffect(() => {
     if (!cards.length) return;
@@ -110,31 +137,84 @@ export default function MemoryScreen({ route }: Props) {
       let earnedSp = 0;
 
       if (isDaily) {
-        await markDailyCompleted();
-        const { alreadyClaimed } = await claimDailyReward();
-        if (!alreadyClaimed) {
-          const profile = await getProfile();
-          const xpResult = await grantXp({
+        const stageResult = await completeDailyStage({
+          stageIndex,
+          gameId: 'memory',
+          difficulty,
+          result: {
+            durationMs: elapsedMs,
+            score,
+            mistakes: attempts,
+          },
+        });
+
+        if (stageResult.stageCompletedNow) {
+          await updateNeuroAfterGame({
             gameId: 'memory',
             difficulty,
             won: true,
             durationMs: elapsedMs,
             score,
+            mistakes: attempts,
             mode: 'daily',
-            streakCurrent: profile.streakCurrent,
           });
-          earnedXp = xpResult.earnedXp;
-
-          const spResult = await grantSeasonPoints({
-            gameId: 'memory',
-            difficulty,
-            durationMs: elapsedMs,
-            isDaily: true,
-            dailyCompletedAndClaimable: true,
-          });
-          earnedSp = spResult.earnedSeasonPoints;
         }
+
+        if (stageResult.circuitCompletedNow) {
+          const { alreadyClaimed } = await claimDailyReward();
+          if (!alreadyClaimed) {
+            const profile = await getProfile();
+            const xpResult = await grantXp({
+              gameId: 'memory',
+              difficulty,
+              won: true,
+              durationMs: elapsedMs,
+              score,
+              mode: 'daily',
+              streakCurrent: profile.streakCurrent,
+            });
+            earnedXp = xpResult.earnedXp;
+
+            const spResult = await grantSeasonPoints({
+              gameId: 'memory',
+              difficulty,
+              durationMs: elapsedMs,
+              isDaily: true,
+              dailyCompletedAndClaimable: true,
+            });
+            earnedSp = spResult.earnedSeasonPoints;
+          }
+        }
+
+        const progress = getDailyProgress(stageResult.daily);
+        await clearMemoryState();
+        setSessionStarted(false);
+        setFinishing(false);
+
+        const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
+        const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
+        navigation.replace('DailyChallenge', {
+          completion: {
+            kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
+            stageIndex: completedStageIndex,
+            earnedXp,
+            earnedSp,
+            result: savedResult,
+            progress,
+          },
+        });
+        return;
       } else {
+        await updateNeuroAfterGame({
+          gameId: 'memory',
+          difficulty,
+          won: true,
+          durationMs: elapsedMs,
+          score,
+          mistakes: attempts,
+          mode: 'normal',
+        });
+
         const xpResult = await grantXp({
           gameId: 'memory',
           difficulty,
@@ -163,6 +243,7 @@ export default function MemoryScreen({ route }: Props) {
   }, [isComplete, finishing, didFinish, cards.length, attempts, difficulty, elapsedMs, isDaily]);
 
   const onCardPress = (index: number) => {
+    if (dailyBlockedReason) return;
     if (lockInput || flipped.includes(index) || matched.includes(index)) return;
     const nextFlipped = [...flipped, index];
     setFlipped(nextFlipped);
@@ -186,6 +267,7 @@ export default function MemoryScreen({ route }: Props) {
   };
 
   const restart = () => {
+    if (isDaily) return;
     setCards(buildDeck(difficulty, isDaily ? dailySeed : undefined));
     setFlipped([]);
     setMatched([]);
@@ -197,15 +279,28 @@ export default function MemoryScreen({ route }: Props) {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-      <Card>
+    <Screen>
+      <Card variant="cyan">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Memory · {difficultyLabel(difficulty)}</Text>
+        <View style={{ marginTop: 8 }}>
+          <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+        </View>
         <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>
           Tiempo: {msToClock(elapsedMs)} · Intentos: {attempts}
         </Text>
       </Card>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+      {dailyBlockedReason ? (
+        <Card>
+          <Text style={[theme.typography.body, { color: theme.colors.warning }]}>{dailyBlockedReason}</Text>
+          <View style={{ marginTop: 10 }}>
+            <Button title="Volver al reto diario" onPress={() => navigation.navigate('DailyChallenge')} />
+          </View>
+        </Card>
+      ) : null}
+
+      {!dailyBlockedReason ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
         {cards.map((card, index) => (
           <MemoryCard
             key={card.id}
@@ -215,9 +310,10 @@ export default function MemoryScreen({ route }: Props) {
             onPress={() => onCardPress(index)}
           />
         ))}
-      </View>
+        </View>
+      ) : null}
 
-      <Button title="Reiniciar" onPress={restart} disabled={isDaily} />
-    </ScrollView>
+      <Button title="Reiniciar" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
+    </Screen>
   );
 }

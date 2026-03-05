@@ -6,6 +6,7 @@ import { DailyChallengeScreen, GamesScreen, HomeScreen, LeaderboardScreen, Progr
 import { SudokuScreen } from '../games/sudoku';
 import { MemoryScreen } from '../games/memory';
 import { MentalMathScreen } from '../games/mentalmath';
+import { SpeedMatchScreen } from '../games/speedmatch';
 import { useAppTheme } from '../shared/theme/theme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -59,6 +60,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: 'Sudoku' }} />
         <Stack.Screen name="Memory" component={MemoryScreen} options={{ title: 'Memory' }} />
         <Stack.Screen name="MentalMath" component={MentalMathScreen} options={{ title: 'Mental Math' }} />
+        <Stack.Screen name="SpeedMatch" component={SpeedMatchScreen} options={{ title: 'Speed Match' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

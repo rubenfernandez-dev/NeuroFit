@@ -3,6 +3,7 @@ import { ColorSchemeName, useColorScheme } from 'react-native';
 import { darkColors, lightColors } from './colors';
 import { spacing } from './spacing';
 import { typography } from './typography';
+import { shadow } from './shadow';
 import { getProfile, ThemePreference, updateProfile, Profile } from '../storage/profile';
 
 export type AppTheme = {
@@ -10,6 +11,7 @@ export type AppTheme = {
   colors: typeof lightColors;
   spacing: typeof spacing;
   typography: typeof typography;
+  shadow: typeof shadow;
 };
 
 type ThemeContextValue = {
@@ -43,6 +45,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       colors: mode === 'dark' ? darkColors : lightColors,
       spacing,
       typography,
+      shadow,
     }),
     [mode],
   );

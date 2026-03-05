@@ -1,7 +1,5 @@
-import { STORAGE_KEYS } from '../storage/keys';
-import { getItem, setItem } from '../storage/secureStore';
-import { createSeededRng, randomInt, shuffle } from '../utils/random';
-import { getLeagueById, getNextLeague, LeagueId } from '../gamification/leagues';
+import { createSeededRng, randomInt } from '../utils/random';
+import { currentSeasonId, LeagueId } from '../gamification/leagues';
 
 export type LeaderboardEntry = {
   rank: number;
@@ -44,51 +42,186 @@ function hashString(value: string): number {
   return hash >>> 0;
 }
 
-async function getOrCreateDeviceSeed(): Promise<string> {
-  const existing = await getItem(STORAGE_KEYS.deviceSeed);
-  if (existing) return existing;
-
-  const created = `${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-  await setItem(STORAGE_KEYS.deviceSeed, created);
-  return created;
-}
-
 function makeBotName(index: number, rng: () => number): string {
   const first = FIRST_NAMES[index % FIRST_NAMES.length];
   const second = SUFFIX[randomInt(0, SUFFIX.length - 1, rng)];
   return `${first}${second}${String(index).padStart(2, '0')}`;
 }
 
-function parseSeasonId(seasonId: string): { year: number; week: number } | null {
-  const match = /^(\d{4})-W(\d{2})$/.exec(seasonId);
-  if (!match) return null;
-  return { year: Number(match[1]), week: Number(match[2]) };
+type LeagueBandProfile = {
+  top1Min: number;
+  top1Max: number;
+  top10Min: number;
+  top10Max: number;
+  midMin: number;
+  midMax: number;
+  bottomMin: number;
+  bottomMax: number;
+  hardCap: number;
+};
+
+const LEAGUE_BANDS: Record<LeagueId, LeagueBandProfile> = {
+  bronze: {
+    top1Min: 250,
+    top1Max: 450,
+    top10Min: 150,
+    top10Max: 320,
+    midMin: 40,
+    midMax: 160,
+    bottomMin: 0,
+    bottomMax: 80,
+    hardCap: 470,
+  },
+  silver: {
+    top1Min: 400,
+    top1Max: 650,
+    top10Min: 250,
+    top10Max: 500,
+    midMin: 100,
+    midMax: 250,
+    bottomMin: 0,
+    bottomMax: 120,
+    hardCap: 680,
+  },
+  gold: {
+    top1Min: 600,
+    top1Max: 900,
+    top10Min: 350,
+    top10Max: 700,
+    midMin: 150,
+    midMax: 350,
+    bottomMin: 0,
+    bottomMax: 160,
+    hardCap: 940,
+  },
+  platinum: {
+    top1Min: 850,
+    top1Max: 1200,
+    top10Min: 500,
+    top10Max: 950,
+    midMin: 200,
+    midMax: 450,
+    bottomMin: 0,
+    bottomMax: 220,
+    hardCap: 1260,
+  },
+  diamond: {
+    top1Min: 1100,
+    top1Max: 1600,
+    top10Min: 650,
+    top10Max: 1250,
+    midMin: 250,
+    midMax: 550,
+    bottomMin: 0,
+    bottomMax: 300,
+    hardCap: 1680,
+  },
+  master: {
+    top1Min: 1350,
+    top1Max: 1900,
+    top10Min: 800,
+    top10Max: 1450,
+    midMin: 320,
+    midMax: 680,
+    bottomMin: 20,
+    bottomMax: 360,
+    hardCap: 1980,
+  },
+  grand_master: {
+    top1Min: 1600,
+    top1Max: 2300,
+    top10Min: 950,
+    top10Max: 1750,
+    midMin: 420,
+    midMax: 820,
+    bottomMin: 40,
+    bottomMax: 460,
+    hardCap: 2400,
+  },
+  legend: {
+    top1Min: 1900,
+    top1Max: 2800,
+    top10Min: 1200,
+    top10Max: 2100,
+    midMin: 520,
+    midMax: 980,
+    bottomMin: 80,
+    bottomMax: 560,
+    hardCap: 2900,
+  },
+};
+
+function lerp(from: number, to: number, t: number): number {
+  return from + (to - from) * t;
 }
 
-function isoWeekStartDate(year: number, week: number): Date {
-  const jan4 = new Date(year, 0, 4);
-  const jan4Day = jan4.getDay();
-  const diffToMonday = jan4Day === 0 ? -6 : 1 - jan4Day;
-  const firstMonday = new Date(year, 0, 4 + diffToMonday);
-  firstMonday.setHours(0, 0, 0, 0);
-  const result = new Date(firstMonday);
-  result.setDate(firstMonday.getDate() + (week - 1) * 7);
-  return result;
+function easeOutCubic(t: number): number {
+  return 1 - (1 - t) ** 3;
 }
 
-function getWeekProgressRatio(seasonId: string, now = new Date()): number {
-  const parsed = parseSeasonId(seasonId);
-  if (!parsed) return 0;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
-  const start = isoWeekStartDate(parsed.year, parsed.week);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 7);
+function curveScoreByPercentile(percentileFromTop: number, profile: LeagueBandProfile): number {
+  const p = clamp(percentileFromTop, 0, 1);
 
-  if (now <= start) return 0;
-  if (now >= end) return 1;
+  const top1Typical = (profile.top1Min + profile.top1Max) / 2;
+  const top10Typical = (profile.top10Min + profile.top10Max) / 2;
+  const midTypical = (profile.midMin + profile.midMax) / 2;
+  const bottomTypical = (profile.bottomMin + profile.bottomMax) / 2;
 
-  const ratio = (now.getTime() - start.getTime()) / (end.getTime() - start.getTime());
-  return Math.max(0, Math.min(1, ratio));
+  if (p <= 0.18) {
+    const local = easeOutCubic(p / 0.18);
+    return lerp(top1Typical, top10Typical, local);
+  }
+
+  if (p <= 0.78) {
+    const local = easeOutCubic((p - 0.18) / 0.6);
+    return lerp(top10Typical, midTypical, local);
+  }
+
+  const local = easeOutCubic((p - 0.78) / 0.22);
+  return lerp(midTypical, bottomTypical, local);
+}
+
+function varianceByPercentile(percentileFromTop: number): number {
+  if (percentileFromTop <= 0.12) return 10;
+  if (percentileFromTop <= 0.4) return 14;
+  if (percentileFromTop <= 0.78) return 18;
+  return 22;
+}
+
+function generateBotEntries(params: { seasonId: string; leagueId: LeagueId; size: number }): Array<Omit<LeaderboardEntry, 'rank' | 'isUser'>> {
+  const { seasonId, leagueId, size } = params;
+  const profile = LEAGUE_BANDS[leagueId];
+  const seed = hashString(`${seasonId}:${leagueId}:bots-v2`);
+  const rng = createSeededRng(seed);
+
+  const tentative = Array.from({ length: size }).map((_, index) => {
+    const percentile = size > 1 ? index / (size - 1) : 0;
+    const base = curveScoreByPercentile(percentile, profile);
+    const noise = randomInt(-varianceByPercentile(percentile), varianceByPercentile(percentile), rng);
+    const raw = Math.round(base + noise);
+
+    return {
+      name: makeBotName(index + 1, rng),
+      seasonPoints: clamp(raw, profile.bottomMin, profile.hardCap),
+    };
+  });
+
+  const sorted = tentative.sort((a, b) => {
+    if (b.seasonPoints !== a.seasonPoints) return b.seasonPoints - a.seasonPoints;
+    return a.name.localeCompare(b.name);
+  });
+
+  for (let i = 1; i < sorted.length; i += 1) {
+    if (sorted[i].seasonPoints > sorted[i - 1].seasonPoints) {
+      sorted[i].seasonPoints = Math.max(profile.bottomMin, sorted[i - 1].seasonPoints - 1);
+    }
+  }
+
+  return sorted;
 }
 
 export async function generateWeeklyLeaderboard(params: {
@@ -100,44 +233,30 @@ export async function generateWeeklyLeaderboard(params: {
 }): Promise<LeaderboardEntry[]> {
   const { seasonId, leagueId, userSeasonPoints, userName = 'Tú' } = params;
   const safeSize = 50;
-  const deviceSeed = await getOrCreateDeviceSeed();
-  const seed = hashString(`${seasonId}:${leagueId}:${deviceSeed}`);
-  const rng = createSeededRng(seed);
-  const league = getLeagueById(leagueId);
-  const progressRatio = getWeekProgressRatio(seasonId);
-  const nextLeague = getNextLeague(leagueId);
-  const weeklyTargetBase = Math.max(league.baselineSeasonPoints, Math.floor((nextLeague?.minSeasonPoints ?? league.minSeasonPoints + 900) * 0.7));
-  const baseline = Math.floor(weeklyTargetBase * progressRatio);
+  const botsSize = Math.max(1, safeSize - 1);
+  const profile = LEAGUE_BANDS[leagueId];
   const userPoints = Math.max(0, Math.floor(userSeasonPoints));
-  const center = Math.max(0, Math.floor(baseline * 0.7 + userPoints * 0.3));
 
-  const entries: LeaderboardEntry[] = [
+  const bots = generateBotEntries({ seasonId, leagueId, size: botsSize }).map((entry) => ({
+    rank: 0,
+    isUser: false,
+    ...entry,
+  }));
+
+  const ranked = [
+    ...bots,
     {
       rank: 0,
       name: userName,
-      seasonPoints: userPoints,
+      seasonPoints: clamp(userPoints, 0, profile.hardCap),
       isUser: true,
     },
-  ];
-
-  for (let index = 0; index < safeSize - 1; index += 1) {
-    const spread = Math.max(30, Math.floor((baseline + 60) * 0.25));
-    const bias = randomInt(-spread, spread, rng);
-    const noise = randomInt(-30, 45, rng);
-    const trendScale = 2 + Math.floor(progressRatio * 8);
-    const trend = Math.floor((index - (safeSize - 1) / 2) * trendScale);
-    const botSp = Math.max(0, Math.floor(center + bias - trend + noise));
-
-    entries.push({
-      rank: 0,
-      name: makeBotName(index + 1, rng),
-      seasonPoints: botSp,
-      isUser: false,
-    });
-  }
-
-  const ranked = shuffle(entries, rng)
-    .sort((a, b) => b.seasonPoints - a.seasonPoints)
+  ]
+    .sort((a, b) => {
+      if (b.seasonPoints !== a.seasonPoints) return b.seasonPoints - a.seasonPoints;
+      if (a.isUser !== b.isUser) return a.isUser ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    })
     .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
   return ranked;
@@ -156,4 +275,25 @@ export async function getUserRankInWeeklyLeaderboard(params: {
   });
 
   return board.find((entry) => entry.isUser)?.rank ?? 50;
+}
+
+export async function debugWeeklyLeaderboardBands(seasonId = currentSeasonId()) {
+  const [bronze, diamond] = await Promise.all([
+    generateWeeklyLeaderboard({ seasonId, leagueId: 'bronze', userSeasonPoints: 0, userName: 'Tú' }),
+    generateWeeklyLeaderboard({ seasonId, leagueId: 'diamond', userSeasonPoints: 0, userName: 'Tú' }),
+  ]);
+
+  const slice = (entries: LeaderboardEntry[]) => ({
+    top10: entries.slice(0, 10).map((entry) => ({ rank: entry.rank, name: entry.name, sp: entry.seasonPoints })),
+    bottom10: entries.slice(-10).map((entry) => ({ rank: entry.rank, name: entry.name, sp: entry.seasonPoints })),
+  });
+
+  const result = {
+    seasonId,
+    bronze: slice(bronze),
+    diamond: slice(diamond),
+  };
+
+  console.log('[NeuroFit] Weekly leaderboard debug', result);
+  return result;
 }

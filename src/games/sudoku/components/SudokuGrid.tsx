@@ -5,6 +5,7 @@ import { useAppTheme } from '../../../shared/theme/theme';
 import { SudokuCellPosition } from '../model/types';
 
 type SudokuGridProps = {
+  size: number;
   grid: number[][];
   notes: number[][][];
   givens: boolean[][];
@@ -15,14 +16,15 @@ type SudokuGridProps = {
   onSelect: (index: number) => void;
 };
 
-export default function SudokuGrid({ grid, notes, givens, selectedIndex, conflicts, errorCell, locked, onSelect }: SudokuGridProps) {
+export default function SudokuGrid({ size, grid, notes, givens, selectedIndex, conflicts, errorCell, locked, onSelect }: SudokuGridProps) {
   const { theme } = useAppTheme();
+  const cellSize = size / 9;
   const selectedRow = Math.floor(selectedIndex / 9);
   const selectedCol = selectedIndex % 9;
   const selectedValue = grid[selectedRow]?.[selectedCol] ?? 0;
 
   return (
-    <View style={{ borderWidth: 2, borderColor: theme.colors.border, alignSelf: 'center' }}>
+    <View style={{ width: size, height: size, borderWidth: 2, borderColor: theme.colors.border, alignSelf: 'center' }}>
       {Array.from({ length: 9 }).map((_, row) => (
         <View key={row} style={{ flexDirection: 'row' }}>
           {Array.from({ length: 9 }).map((__, col) => {
@@ -45,6 +47,7 @@ export default function SudokuGrid({ grid, notes, givens, selectedIndex, conflic
                 <SudokuCell
                   value={grid[row][col]}
                   notes={notes[row][col]}
+                  size={cellSize}
                   fixed={givens[row][col]}
                   selected={selectedIndex === index}
                   conflict={conflicts.has(index)}

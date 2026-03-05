@@ -38,13 +38,13 @@ export default function SettingsScreen() {
   }, [prefs]);
 
   const confirmReset = () => {
-    Alert.alert('Reset progreso', 'Esto borrará stats, perfil y reto diario.', [
+    Alert.alert('Reset progreso', 'Esto borrará stats y perfil.', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Reset',
         style: 'destructive',
         onPress: async () => {
-          await Promise.all([resetStats(), resetProfile(), resetDaily()]);
+          await Promise.all([resetStats(), resetProfile()]);
         },
       },
     ]);

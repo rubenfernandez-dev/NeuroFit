@@ -7,17 +7,64 @@ type KeypadProps = {
   onClear: () => void;
   disabled?: boolean;
   clearDisabled?: boolean;
+  compact?: boolean;
+  buttonSize?: number;
+  gap?: number;
+  showClear?: boolean;
 };
 
-export default function Keypad({ onInput, onClear, disabled, clearDisabled }: KeypadProps) {
+export default function Keypad({
+  onInput,
+  onClear,
+  disabled,
+  clearDisabled,
+  compact = false,
+  buttonSize = 52,
+  gap = 8,
+  showClear = true,
+}: KeypadProps) {
+  const rows = compact
+    ? [
+        [1, 2, 3, 4, 5],
+        [6, 7, 8, 9],
+      ]
+    : [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ];
+
   return (
-    <View style={{ gap: 8 }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-        {Array.from({ length: 9 }).map((_, i) => (
-          <Button key={i + 1} title={String(i + 1)} onPress={() => onInput(i + 1)} disabled={disabled} style={{ width: '18%' }} />
-        ))}
-      </View>
-      <Button title="Borrar" variant="secondary" onPress={onClear} disabled={disabled || clearDisabled} />
+    <View style={{ gap, flexShrink: 0 }}>
+      {rows.map((row, rowIndex) => (
+        <View key={rowIndex} style={{ flexDirection: 'row', gap, justifyContent: 'center' }}>
+          {row.map((value) => (
+            <Button
+              key={value}
+              title={String(value)}
+              onPress={() => onInput(value)}
+              disabled={disabled}
+              style={{
+                width: buttonSize,
+                minHeight: buttonSize,
+                borderRadius: 999,
+                paddingHorizontal: 0,
+                paddingVertical: 0,
+              }}
+            />
+          ))}
+        </View>
+      ))}
+
+      {showClear ? (
+        <Button
+          title="Borrar"
+          variant="secondary"
+          onPress={onClear}
+          disabled={disabled || clearDisabled}
+          style={{ minHeight: Math.max(40, buttonSize - 2) }}
+        />
+      ) : null}
     </View>
   );
 }

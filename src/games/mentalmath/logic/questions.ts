@@ -36,7 +36,12 @@ function makeHard(rng: () => number): Question {
 
 export function generateQuestions(difficulty: Difficulty, count: number, seed?: number): Question[] {
   const rng = typeof seed === 'number' ? createSeededRng(seed) : Math.random;
-  const factory = difficulty === 'principiante' ? makeEasy : difficulty === 'avanzado' ? makeMedium : makeHard;
+  const factory =
+    difficulty === 'principiante'
+      ? makeEasy
+      : difficulty === 'avanzado'
+        ? makeMedium
+        : makeHard;
 
   return Array.from({ length: count }).map(() => factory(rng));
 }

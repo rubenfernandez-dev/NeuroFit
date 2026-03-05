@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -12,17 +12,21 @@ import { clearMentalMathState, getMentalMathState, saveMentalMathState } from '.
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { grantXp } from '../../shared/gamification/xp';
 import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, markDailyCompleted } from '../../shared/storage/daily';
+import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
 import { getProfile } from '../../shared/storage/profile';
+import Screen from '../../shared/ui/Screen';
+import Pill from '../../shared/ui/Pill';
+import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
-export default function MentalMathScreen({ route }: Props) {
+export default function MentalMathScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
   const difficulty = normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty;
-  const isDaily = !!route.params?.isDaily;
+  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
   const dailyDateISO = route.params?.dailyDateISO;
   const dailySeed = route.params?.dailySeed;
+  const stageIndex = route.params?.stageIndex;
 
   const [questions, setQuestions] = useState(generateQuestions(difficulty, 40, isDaily ? dailySeed : undefined));
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -33,10 +37,34 @@ export default function MentalMathScreen({ route }: Props) {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [didFinish, setDidFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const init = async () => {
+      if (isDaily) {
+        const daily = await ensureDailyToday();
+        const expectedStage = daily.stages[daily.currentStageIndex];
+
+        if (daily.completed) {
+          setDailyBlockedReason('Reto diario ya completado, vuelve mañana.');
+          Alert.alert('Reto diario completado', 'Reto diario ya completado, vuelve mañana.');
+          return;
+        }
+
+        if (!expectedStage || expectedStage.gameId !== 'mentalmath') {
+          setDailyBlockedReason('Esta etapa no está activa. Continúa el circuito desde Reto diario.');
+          return;
+        }
+
+        if (typeof stageIndex === 'number' && stageIndex !== daily.currentStageIndex) {
+          setDailyBlockedReason('Esta etapa ya no está activa. Continúa desde Reto diario.');
+          return;
+        }
+
+        await markDailyStageStarted({ stageIndex, gameId: 'mentalmath' });
+      }
+
       const saved = await getMentalMathState();
       if (
         saved &&
@@ -76,14 +104,15 @@ export default function MentalMathScreen({ route }: Props) {
     return () => {
       mounted = false;
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed]);
+  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex]);
 
   useEffect(() => {
+    if (!sessionStarted || didFinish || dailyBlockedReason) return;
     const timer = setInterval(() => {
       setTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [sessionStarted, didFinish, dailyBlockedReason]);
 
   useEffect(() => {
     saveMentalMathState({
@@ -119,31 +148,84 @@ export default function MentalMathScreen({ route }: Props) {
     let earnedSp = 0;
 
     if (isDaily) {
-      await markDailyCompleted();
-      const { alreadyClaimed } = await claimDailyReward();
-      if (!alreadyClaimed) {
-        const profile = await getProfile();
-        const xpResult = await grantXp({
+      const stageResult = await completeDailyStage({
+        stageIndex,
+        gameId: 'mentalmath',
+        difficulty,
+        result: {
+          durationMs: 60_000,
+          score: correct,
+          mistakes: wrong,
+        },
+      });
+
+      if (stageResult.stageCompletedNow) {
+        await updateNeuroAfterGame({
           gameId: 'mentalmath',
           difficulty,
           won: true,
-          durationMs: 60000,
+          durationMs: 60_000,
           score: correct,
+          mistakes: wrong,
           mode: 'daily',
-          streakCurrent: profile.streakCurrent,
         });
-        earnedXp = xpResult.earnedXp;
-
-        const spResult = await grantSeasonPoints({
-          gameId: 'mentalmath',
-          difficulty,
-          durationMs: 60000,
-          isDaily: true,
-          dailyCompletedAndClaimable: true,
-        });
-        earnedSp = spResult.earnedSeasonPoints;
       }
+
+      if (stageResult.circuitCompletedNow) {
+        const { alreadyClaimed } = await claimDailyReward();
+        if (!alreadyClaimed) {
+          const profile = await getProfile();
+          const xpResult = await grantXp({
+            gameId: 'mentalmath',
+            difficulty,
+            won: true,
+            durationMs: 60000,
+            score: correct,
+            mode: 'daily',
+            streakCurrent: profile.streakCurrent,
+          });
+          earnedXp = xpResult.earnedXp;
+
+          const spResult = await grantSeasonPoints({
+            gameId: 'mentalmath',
+            difficulty,
+            durationMs: 60000,
+            isDaily: true,
+            dailyCompletedAndClaimable: true,
+          });
+          earnedSp = spResult.earnedSeasonPoints;
+        }
+      }
+
+      const progress = getDailyProgress(stageResult.daily);
+      await clearMentalMathState();
+      setSessionStarted(false);
+      setFinishing(false);
+
+      const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
+      const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
+      navigation.replace('DailyChallenge', {
+        completion: {
+          kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
+          stageIndex: completedStageIndex,
+          earnedXp,
+          earnedSp,
+          result: savedResult,
+          progress,
+        },
+      });
+      return;
     } else {
+      await updateNeuroAfterGame({
+        gameId: 'mentalmath',
+        difficulty,
+        won: true,
+        durationMs: 60_000,
+        score: correct,
+        mistakes: wrong,
+        mode: 'normal',
+      });
+
       const xpResult = await grantXp({
         gameId: 'mentalmath',
         difficulty,
@@ -176,6 +258,7 @@ export default function MentalMathScreen({ route }: Props) {
   }, [timeLeft]);
 
   const submit = () => {
+    if (dailyBlockedReason || didFinish) return;
     const answer = Number(inputValue);
     if (!Number.isFinite(answer)) return;
 
@@ -187,11 +270,13 @@ export default function MentalMathScreen({ route }: Props) {
   };
 
   const appendDigit = (digit: string) => {
+    if (dailyBlockedReason || didFinish) return;
     if (digit === '-' && inputValue.includes('-')) return;
     setInputValue((prev) => (prev === '0' ? digit : prev + digit));
   };
 
   const resetSession = () => {
+    if (isDaily) return;
     setQuestions(generateQuestions(difficulty, 40, isDaily ? dailySeed : undefined));
     setCurrentIndex(0);
     setCorrect(0);
@@ -204,27 +289,43 @@ export default function MentalMathScreen({ route }: Props) {
   };
 
   return (
-    <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
+    <Screen>
       <HUD timeLeft={timeLeft} correct={correct} wrong={wrong} />
 
-      <Card>
+      <Card variant="pink">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Mental Math · {difficultyLabel(difficulty)}</Text>
+        <View style={{ marginTop: 8 }}>
+          <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+        </View>
         <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
         <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Respuesta: {inputValue || '...'}</Text>
       </Card>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+      {dailyBlockedReason ? (
+        <Card>
+          <Text style={[theme.typography.body, { color: theme.colors.warning }]}>{dailyBlockedReason}</Text>
+          <View style={{ marginTop: 10 }}>
+            <Button title="Volver al reto diario" onPress={() => navigation.navigate('DailyChallenge')} />
+          </View>
+        </Card>
+      ) : null}
+
+      {!dailyBlockedReason ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '0'].map((digit) => (
           <Button key={digit} title={digit} onPress={() => appendDigit(digit)} style={{ width: 68 }} />
         ))}
-      </View>
+        </View>
+      ) : null}
 
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        <Button title="Borrar" variant="secondary" onPress={() => setInputValue('')} style={{ flex: 1 }} />
-        <Button title="Enviar" onPress={submit} style={{ flex: 1 }} />
-      </View>
+      <Card>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Button title="Borrar" variant="secondary" onPress={() => setInputValue('')} style={{ flex: 1 }} disabled={!!dailyBlockedReason} />
+          <Button title="Enviar" onPress={submit} style={{ flex: 1 }} disabled={!!dailyBlockedReason} />
+        </View>
+      </Card>
 
-      <Button title="Reiniciar" variant="ghost" onPress={resetSession} />
-    </ScrollView>
+      <Button title="Reiniciar" variant="ghost" onPress={resetSession} disabled={isDaily || !!dailyBlockedReason} />
+    </Screen>
   );
 }

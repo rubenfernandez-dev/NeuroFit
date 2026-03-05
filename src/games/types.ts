@@ -1,4 +1,4 @@
-export type GameId = 'sudoku' | 'memory' | 'mentalmath';
+export type GameId = 'sudoku' | 'memory' | 'mentalmath' | 'speedmatch';
 export type Difficulty = 'principiante' | 'avanzado' | 'experto' | 'maestro' | 'gran_maestro';
 
 const LEGACY_DIFFICULTY_MAP: Record<string, Difficulty> = {
@@ -32,7 +32,7 @@ export type GameDefinition = {
   title: string;
   subtitle: string;
   icon: string;
-  routeName: 'Sudoku' | 'Memory' | 'MentalMath';
+  routeName: 'Sudoku' | 'Memory' | 'MentalMath' | 'SpeedMatch';
   difficulties: Difficulty[];
   enabled: boolean;
 };

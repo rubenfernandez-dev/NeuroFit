@@ -12,6 +12,7 @@ type ButtonProps = {
 
 export default function Button({ title, onPress, variant = 'primary', disabled, style }: ButtonProps) {
   const { theme } = useAppTheme();
+  const elevated = variant === 'primary';
 
   return (
     <Pressable
@@ -19,21 +20,22 @@ export default function Button({ title, onPress, variant = 'primary', disabled, 
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
+        elevated ? theme.shadow(2) : null,
         {
           borderColor: theme.colors.border,
           backgroundColor:
             variant === 'primary'
               ? theme.colors.primary
               : variant === 'secondary'
-                ? theme.colors.surface
+                ? theme.colors.bg1
                 : 'transparent',
-          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
+          transform: [{ scale: pressed ? 0.98 : 1 }],
+          opacity: disabled ? 0.5 : pressed ? 0.92 : 1,
         },
         style,
       ]}
     >
       <Text
-        numberOfLines={1}
         style={[
           styles.label,
           {
@@ -49,19 +51,20 @@ export default function Button({ title, onPress, variant = 'primary', disabled, 
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 46,
+    minHeight: 54,
     minWidth: 0,
     borderWidth: 1,
-    borderRadius: 14,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
     flexShrink: 1,
+    flexWrap: 'wrap',
   },
 });

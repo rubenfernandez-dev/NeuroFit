@@ -1,14 +1,17 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getAllStats } from '../shared/storage/stats';
 import { ensureSeasonCurrent } from '../shared/storage/profile';
 import { getLevelByXp, getNextLevel } from '../shared/gamification/levels';
 import { enabledGames } from '../games/registry';
 import Card from '../shared/ui/Card';
-import StatRow from '../shared/ui/StatRow';
 import { useAppTheme } from '../shared/theme/theme';
 import { getLeagueById } from '../shared/gamification/leagues';
+import Screen from '../shared/ui/Screen';
+import ProgressBar from '../shared/ui/ProgressBar';
+import Pill from '../shared/ui/Pill';
+import { todayISODate } from '../shared/utils/time';
 
 type Snapshot = {
   xpTotal: number;
@@ -18,6 +21,13 @@ type Snapshot = {
   sessionsTotal: number;
   streakCurrent: number;
   streakBest: number;
+  neuro: {
+    speed: number;
+    memory: number;
+    logic: number;
+    attention: number;
+    updatedAtISO?: string;
+  };
   stats: Awaited<ReturnType<typeof getAllStats>>;
 };
 
@@ -31,6 +41,12 @@ export default function ProgressScreen() {
     sessionsTotal: 0,
     streakCurrent: 0,
     streakBest: 0,
+    neuro: {
+      speed: 50,
+      memory: 50,
+      logic: 50,
+      attention: 50,
+    },
     stats: {},
   });
 
@@ -45,6 +61,7 @@ export default function ProgressScreen() {
       sessionsTotal,
       streakCurrent: profile.streakCurrent,
       streakBest: profile.streakBest,
+      neuro: profile.neuro,
       stats,
     });
   }, []);
@@ -64,40 +81,96 @@ export default function ProgressScreen() {
   const sudokuAvgTime = sudokuCompleted > 0 ? Math.round((sudokuStats?.sudokuTotalTimeMs ?? 0) / sudokuCompleted) : 0;
   const sudokuAvgMistakes = sudokuPlayed > 0 ? ((sudokuStats?.sudokuTotalMistakes ?? 0) / sudokuPlayed).toFixed(2) : '0.00';
   const sudokuWinRate = sudokuPlayed > 0 ? `${Math.round((sudokuCompleted / sudokuPlayed) * 100)}%` : '0%';
+  const neuroMetrics = useMemo(
+    () => [
+      { key: 'speed', title: '⚡ Velocidad mental', value: snapshot.neuro.speed, color: theme.colors.orange },
+      { key: 'memory', title: '🧠 Memoria', value: snapshot.neuro.memory, color: theme.colors.pink },
+      { key: 'logic', title: '🧩 Lógica', value: snapshot.neuro.logic, color: theme.colors.primary },
+      { key: 'attention', title: '🎯 Atención', value: snapshot.neuro.attention, color: theme.colors.cyan },
+    ],
+    [snapshot.neuro, theme.colors],
+  );
+
+  const strongest = useMemo(
+    () => neuroMetrics.reduce((best, current) => (current.value > best.value ? current : best), neuroMetrics[0]),
+    [neuroMetrics],
+  );
+  const weakest = useMemo(
+    () => neuroMetrics.reduce((min, current) => (current.value < min.value ? current : min), neuroMetrics[0]),
+    [neuroMetrics],
+  );
+
+  const neuroUpdatedLabel = useMemo(() => {
+    if (!snapshot.neuro.updatedAtISO) return 'sin actualizar';
+    const day = snapshot.neuro.updatedAtISO.slice(0, 10);
+    return day === todayISODate() ? 'hoy' : day;
+  }, [snapshot.neuro.updatedAtISO]);
 
   const progress = nextLevel
     ? (snapshot.xpTotal - level.minXp) / Math.max(1, nextLevel.minXp - level.minXp)
     : 1;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
-      <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Resumen general</Text>
-        <StatRow label="Sesiones totales" value={String(snapshot.sessionsTotal)} />
-        <StatRow label="XP total (permanente)" value={String(snapshot.xpTotal)} />
-        <StatRow label="Nivel XP" value={`${level.badgeEmoji} ${level.name}`} />
-        <StatRow label="SP temporada" value={`${snapshot.seasonPoints} SP`} />
-        <StatRow label="Liga semanal" value={`${league.badgeEmoji} ${league.name}`} />
-        <StatRow label="Temporada" value={snapshot.seasonId || '-'} />
-        <StatRow label="Objetivo liga" value="Top 10 para ascender" />
-        <StatRow label="Racha actual" value={`${snapshot.streakCurrent} días`} />
-        <StatRow label="Mejor racha" value={`${snapshot.streakBest} días`} />
-        <View style={[styles.progressTrack, { backgroundColor: theme.colors.border, marginTop: 8 }]}>
-          <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: theme.colors.primary }]} />
+    <Screen>
+      <Card variant="primary">
+        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>NeuroScore</Text>
+        <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 4 }]}>Actualizado: {neuroUpdatedLabel}</Text>
+        <View style={{ marginTop: 12, gap: 10 }}>
+          {neuroMetrics.map((metric) => (
+            <View key={metric.key} style={{ gap: 6 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={[theme.typography.bodySmall, { color: theme.colors.text }]}>{metric.title}</Text>
+                <Text style={[theme.typography.label, { color: metric.color }]}>{metric.value}</Text>
+              </View>
+              <ProgressBar value={metric.value / 100} color={metric.color} />
+            </View>
+          ))}
         </View>
-        <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-          {nextLevel ? `Faltan ${nextLevel.minXp - snapshot.xpTotal} XP para ${nextLevel.name}` : 'Nivel máximo'}
-        </Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <Pill label={`Punto fuerte: ${strongest?.title.replace(/^[^ ]+\s/, '') ?? '-'}`} tone="success" />
+          <Pill label={`A mejorar: ${weakest?.title.replace(/^[^ ]+\s/, '') ?? '-'}`} tone="warning" />
+        </View>
       </Card>
 
-      <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Sudoku</Text>
-        <StatRow label="Partidas jugadas" value={String(sudokuPlayed)} />
-        <StatRow label="Completados" value={String(sudokuCompleted)} />
-        <StatRow label="Win rate" value={sudokuWinRate} />
-        <StatRow label="Mejor tiempo (ms)" value={String(sudokuStats?.bestTimeMs ?? '-')} />
-        <StatRow label="Tiempo medio (ms)" value={String(sudokuAvgTime)} />
-        <StatRow label="Fallos medios" value={sudokuAvgMistakes} />
+      <Card variant="primary">
+        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>XP y nivel</Text>
+        <Text style={[theme.typography.title, { color: theme.colors.primary, marginTop: 8 }]}>{snapshot.xpTotal}</Text>
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.muted }]}>XP total · {level.badgeEmoji} {level.name}</Text>
+        <View style={{ marginTop: 10 }}>
+          <ProgressBar value={progress} label={nextLevel ? `Faltan ${Math.max(0, nextLevel.minXp - snapshot.xpTotal)} XP para ${nextLevel.name}` : 'Nivel máximo'} />
+        </View>
+      </Card>
+
+      <Card variant="warning">
+        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Liga semanal</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <Pill label={`${league.badgeEmoji} ${league.name}`} tone="default" />
+          <Pill label={`${snapshot.seasonPoints} SP`} tone="cyan" />
+          <Pill label={`Temp ${snapshot.seasonId || '-'}`} tone="pink" />
+        </View>
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.muted, marginTop: 10 }]}>Top 10 ascienden • Últimos 10 descienden</Text>
+      </Card>
+
+      <Card variant="success">
+        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Stats Sudoku</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
+          <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Partidas</Text>
+            <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 2 }]}>{sudokuPlayed}</Text>
+          </View>
+          <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Completados</Text>
+            <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 2 }]}>{sudokuCompleted}</Text>
+          </View>
+          <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Win rate</Text>
+            <Text style={[theme.typography.h2, { color: theme.colors.green, marginTop: 2 }]}>{sudokuWinRate}</Text>
+          </View>
+          <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Tiempo medio</Text>
+            <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 2 }]}>{sudokuAvgTime} ms</Text>
+          </View>
+        </View>
       </Card>
 
       {enabledGames().map((game) => {
@@ -107,23 +180,14 @@ export default function ProgressScreen() {
             <Text style={[theme.typography.h3, { color: theme.colors.text }]}>
               {game.icon} {game.title}
             </Text>
-            <StatRow label="Sesiones" value={String(stat?.sessions ?? 0)} />
-            <StatRow label="Best score" value={String(stat?.bestScore ?? '-')} />
-            <StatRow label="Best time (ms)" value={String(stat?.bestTimeMs ?? '-')} />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <Pill label={`Sesiones ${stat?.sessions ?? 0}`} tone="default" />
+              <Pill label={`Best score ${stat?.bestScore ?? '-'}`} tone="pink" />
+            </View>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 8 }]}>Best time: {stat?.bestTimeMs ?? '-'} ms · Fallos medios Sudoku: {sudokuAvgMistakes}</Text>
           </Card>
         );
       })}
-    </ScrollView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  progressTrack: {
-    height: 10,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-  },
-});

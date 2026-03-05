@@ -8,4 +8,5 @@ export const STORAGE_KEYS = {
   sudokuState: 'neurofit.sudoku.state',
   memoryState: 'neurofit.memory.state',
   mentalMathState: 'neurofit.mentalmath.state',
+  speedMatchState: 'neurofit.speedmatch.state',
 } as const;

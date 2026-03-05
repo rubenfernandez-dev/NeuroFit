@@ -18,12 +18,13 @@ export default function MemoryCard({ emoji, isFaceUp, isMatched, onPress }: Memo
       style={{
         width: 46,
         height: 58,
-        borderRadius: 12,
+        borderRadius: 14,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        backgroundColor: isFaceUp || isMatched ? theme.colors.surface : theme.colors.primary,
+        backgroundColor: isFaceUp || isMatched ? theme.colors.bg1 : theme.colors.primary,
         alignItems: 'center',
         justifyContent: 'center',
+        ...theme.shadow(isFaceUp || isMatched ? 1 : 2),
       }}
     >
       <Text style={{ fontSize: 24 }}>{isFaceUp || isMatched ? emoji : '•'}</Text>
