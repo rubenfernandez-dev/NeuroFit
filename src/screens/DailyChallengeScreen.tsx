@@ -163,9 +163,49 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   const [streakCurrent, setStreakCurrent] = useState(0);
   const [showFinalConfetti, setShowFinalConfetti] = useState(completion?.kind === 'final');
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  const clearCompletion = useCallback(() => {
+    navigation.replace('DailyChallenge');
+  }, [navigation]);
+
+  const cancelAutoAdvance = useCallback(() => {
+    if (autoAdvanceTimeoutRef.current) {
+      clearTimeout(autoAdvanceTimeoutRef.current);
+      autoAdvanceTimeoutRef.current = null;
+    }
+  }, []);
+
+  const progress = useMemo(
+    () => (daily ? getDailyProgress(daily) : { completedStages: 0, totalStages: 3 }),
+    [daily],
+  );
+  const currentStage = useMemo(() => (daily ? daily.stages[daily.currentStageIndex] ?? null : null), [daily]);
+  const nextStage = useMemo(
+    () => (completion?.kind === 'stage' && daily ? daily.stages[daily.currentStageIndex] ?? null : null),
+    [completion?.kind, daily],
+  );
+  const nextStageLabel = useMemo(() => (nextStage ? getGameLabel(nextStage.gameId) : null), [nextStage]);
+
+  const startChallenge = useCallback(() => {
+    if (!daily || !currentStage || daily.completed) return;
+    const game = getGameById(currentStage.gameId);
+    if (!game) return;
+
+    navigation.navigate(game.routeName, {
+      gameId: currentStage.gameId,
+      difficulty: currentStage.difficulty,
+      mode: 'daily',
+      isDaily: true,
+      dailyDateISO: daily.lastDailyDateISO,
+      dailySeed: currentStage.seed,
+      stageIndex: daily.currentStageIndex,
+    });
+  }, [currentStage, daily, navigation]);
 
   const load = useCallback(() => {
     Promise.all([ensureDailyToday(), getProfile()]).then(([dailyState, profile]) => {
+      if (!mountedRef.current) return;
       setDaily(dailyState);
       setStreakCurrent(profile.streakCurrent);
     });
@@ -181,48 +221,17 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
     setShowFinalConfetti(completion?.kind === 'final');
   }, [completion?.kind]);
 
-  if (!daily) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: theme.colors.textMuted }}>Cargando reto...</Text>
-      </View>
-    );
-  }
-
-  const progress = getDailyProgress(daily);
-  const currentStage = daily.stages[daily.currentStageIndex] ?? null;
-  const nextStage = completion?.kind === 'stage' ? daily.stages[daily.currentStageIndex] ?? null : null;
-  const nextStageLabel = nextStage ? getGameLabel(nextStage.gameId) : null;
-
-  const clearCompletion = () => {
-    navigation.replace('DailyChallenge');
-  };
-
-  const cancelAutoAdvance = useCallback(() => {
-    if (autoAdvanceTimeoutRef.current) {
-      clearTimeout(autoAdvanceTimeoutRef.current);
-      autoAdvanceTimeoutRef.current = null;
-    }
-  }, []);
-
-  const startChallenge = () => {
-    if (!currentStage) return;
-    const game = getGameById(currentStage.gameId);
-    if (!game) return;
-
-    navigation.navigate(game.routeName, {
-      gameId: currentStage.gameId,
-      difficulty: currentStage.difficulty,
-      mode: 'daily',
-      isDaily: true,
-      dailyDateISO: daily.lastDailyDateISO,
-      dailySeed: currentStage.seed,
-      stageIndex: daily.currentStageIndex,
-    });
-  };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelAutoAdvance();
+    };
+  }, [cancelAutoAdvance]);
 
   useEffect(() => {
     cancelAutoAdvance();
+    if (!daily) return;
     if (completion?.kind !== 'stage') return;
     if (!nextStage || daily.completed) return;
 
@@ -233,7 +242,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
     return () => {
       cancelAutoAdvance();
     };
-  }, [cancelAutoAdvance, completion?.kind, daily.completed, nextStage]);
+  }, [cancelAutoAdvance, completion?.kind, daily?.completed, nextStage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -253,6 +262,15 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
       };
     }, [cancelAutoAdvance, clearCompletion, completion?.kind, navigation]),
   );
+
+  // Root cause fixed: all hooks now run before any conditional return, keeping hook order stable across renders.
+  if (!daily) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: theme.colors.textMuted }}>Cargando reto...</Text>
+      </View>
+    );
+  }
 
   if (completion?.kind === 'stage') {
     return (
