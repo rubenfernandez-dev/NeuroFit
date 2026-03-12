@@ -65,6 +65,8 @@ const defaultProfile: Profile = {
     memory: 'principiante',
     mentalmath: 'avanzado',
     speedmatch: 'avanzado',
+    patternmemory: 'avanzado',
+    focusgrid: 'avanzado',
   },
   neuro: {
     speed: 50,
@@ -99,6 +101,8 @@ export async function getProfile(): Promise<Profile> {
         memory: normalizeDifficulty(parsed.preferredDifficultyByGame?.memory, defaultProfile.preferredDifficultyByGame.memory),
         mentalmath: normalizeDifficulty(parsed.preferredDifficultyByGame?.mentalmath, defaultProfile.preferredDifficultyByGame.mentalmath),
         speedmatch: normalizeDifficulty(parsed.preferredDifficultyByGame?.speedmatch, defaultProfile.preferredDifficultyByGame.speedmatch),
+        patternmemory: normalizeDifficulty(parsed.preferredDifficultyByGame?.patternmemory, defaultProfile.preferredDifficultyByGame.patternmemory),
+        focusgrid: normalizeDifficulty(parsed.preferredDifficultyByGame?.focusgrid, defaultProfile.preferredDifficultyByGame.focusgrid),
       },
       neuro,
     };

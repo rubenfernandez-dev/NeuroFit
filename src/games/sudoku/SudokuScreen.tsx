@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../app/routes';
+import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { getPuzzle } from './logic/generator';
 import { findConflicts, isSolved } from './logic/validate';
@@ -13,14 +13,12 @@ import Card from '../../shared/ui/Card';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { trackGameOver, trackSessionStart, trackWin } from '../../shared/storage/stats';
-import { grantXp } from '../../shared/gamification/xp';
-import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
-import { getProfile } from '../../shared/storage/profile';
+import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { SudokuCellPosition, SudokuHistoryEntry } from './model/types';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
+import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -37,13 +35,11 @@ type VictorySummary = {
 export default function SudokuScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
-  const dailyDateISO = route.params?.dailyDateISO;
-  const dailySeed = route.params?.dailySeed;
-  const stageIndex = route.params?.stageIndex;
+  const gameRoute = normalizeGameRouteParams(route.params);
+  const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
   const hasPresetDifficulty = isDaily || !!route.params?.difficulty;
 
-  const [difficulty, setDifficulty] = useState<Difficulty>(normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty);
+  const [difficulty, setDifficulty] = useState<Difficulty>(normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty);
   const [difficultyConfirmed, setDifficultyConfirmed] = useState(hasPresetDifficulty);
   const [puzzle, setPuzzle] = useState<number[]>([]);
   const [solution, setSolution] = useState<number[]>([]);
@@ -82,10 +78,10 @@ export default function SudokuScreen({ route, navigation }: Props) {
   const cloneNotes = (matrix: number[][][]) => matrix.map((row) => row.map((cell) => [...cell]));
 
   useEffect(() => {
-    const nextDifficulty = normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty;
+    const nextDifficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
     setDifficulty(nextDifficulty);
     setDifficultyConfirmed(isDaily || !!route.params?.difficulty);
-  }, [route.params?.difficulty, isDaily]);
+  }, [gameRoute.difficulty, isDaily, route.params?.difficulty]);
 
   useEffect(() => {
     if (!difficultyConfirmed) return;
@@ -233,112 +229,38 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setDidWin(true);
     await trackWin({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal', difficulty, durationMs: elapsedMs, mistakes });
 
-    let earnedXp = 0;
-    let earnedSp = 0;
+    const completionResult = await completeGameSession({
+      gameId: 'sudoku',
+      difficulty,
+      mode: isDaily ? 'daily' : 'normal',
+      won: true,
+      stageIndex,
+      metrics: {
+        durationMs: elapsedMs,
+        mistakes,
+        score: 100,
+      },
+    });
 
-    if (isDaily) {
-      const stageResult = await completeDailyStage({
-        stageIndex,
-        gameId: 'sudoku',
-        difficulty,
-        result: {
-          durationMs: elapsedMs,
-          mistakes,
-          score: 100,
-        },
-      });
-
-      if (stageResult.stageCompletedNow) {
-        await updateNeuroAfterGame({
-          gameId: 'sudoku',
-          difficulty,
-          won: true,
-          durationMs: elapsedMs,
-          score: 100,
-          mistakes,
-          mode: 'daily',
-        });
-      }
-
-      if (stageResult.circuitCompletedNow) {
-        const { alreadyClaimed } = await claimDailyReward();
-        if (!alreadyClaimed) {
-          const profile = await getProfile();
-          const xpResult = await grantXp({
-            gameId: 'sudoku',
-            difficulty,
-            won: true,
-            durationMs: elapsedMs,
-            score: 100,
-            mode: 'daily',
-            streakCurrent: profile.streakCurrent,
-          });
-          earnedXp = xpResult.earnedXp;
-
-          const spResult = await grantSeasonPoints({
-            gameId: 'sudoku',
-            difficulty,
-            mistakes,
-            durationMs: elapsedMs,
-            isDaily: true,
-            dailyCompletedAndClaimable: true,
-          });
-          earnedSp = spResult.earnedSeasonPoints;
-        }
-      }
-
-      const progress = getDailyProgress(stageResult.daily);
+    if (isDaily && completionResult.dailyCompletion) {
       await clearSudokuState();
       setSessionStarted(false);
       setFinishing(false);
 
-      const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
-      const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
       navigation.replace('DailyChallenge', {
-        completion: {
-          kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
-          stageIndex: completedStageIndex,
-          earnedXp,
-          earnedSp,
-          result: savedResult,
-          progress,
-        },
+        completion: completionResult.dailyCompletion,
       });
       return;
-    } else {
-      await updateNeuroAfterGame({
-        gameId: 'sudoku',
-        difficulty,
-        won: true,
-        durationMs: elapsedMs,
-        score: 100,
-        mistakes,
-        mode: 'normal',
-      });
-
-      const xpResult = await grantXp({
-        gameId: 'sudoku',
-        difficulty,
-        won: true,
-        durationMs: elapsedMs,
-        score: 100,
-        mode: 'normal',
-      });
-      earnedXp = xpResult.earnedXp;
-
-      const spResult = await grantSeasonPoints({
-        gameId: 'sudoku',
-        difficulty,
-        mistakes,
-        durationMs: elapsedMs,
-        isDaily: false,
-      });
-      earnedSp = spResult.earnedSeasonPoints;
     }
 
     await clearSudokuState();
     setSessionStarted(false);
-    setVictorySummary({ earnedXp, earnedSp, elapsedMs, mistakes });
+    setVictorySummary({
+      earnedXp: completionResult.earnedXp,
+      earnedSp: completionResult.earnedSp,
+      elapsedMs,
+      mistakes,
+    });
     setVictoryVisible(true);
     setFinishing(false);
   };

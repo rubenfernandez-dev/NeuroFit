@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../app/routes';
+import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { buildDeck, getBoardSize } from './logic/deck';
 import MemoryCard from './components/MemoryCard';
@@ -11,23 +11,18 @@ import Button from '../../shared/ui/Button';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
-import { grantXp } from '../../shared/gamification/xp';
-import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
-import { getProfile } from '../../shared/storage/profile';
+import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
-import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
+import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
 export default function MemoryScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
-  const difficulty = normalizeDifficulty(route.params?.difficulty, 'principiante') as Difficulty;
-  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
-  const dailyDateISO = route.params?.dailyDateISO;
-  const dailySeed = route.params?.dailySeed;
-  const stageIndex = route.params?.stageIndex;
+  const gameRoute = normalizeGameRouteParams(route.params);
+  const difficulty = normalizeDifficulty(gameRoute.difficulty, 'principiante') as Difficulty;
+  const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
 
   const [cards, setCards] = useState<ReturnType<typeof buildDeck>>([]);
   const [flipped, setFlipped] = useState<number[]>([]);
@@ -125,7 +120,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
     const finalize = async () => {
       setFinishing(true);
       setDidFinish(true);
-      const score = Math.max(0, cards.length * 10 - attempts * 3);
+      const scoreRaw = Math.max(0, cards.length * 10 - attempts * 3);
+      const score = Math.max(0, Math.min(100, Math.round(scoreRaw)));
       await trackWin({
         gameId: 'memory',
         mode: isDaily ? 'daily' : 'normal',
@@ -133,110 +129,36 @@ export default function MemoryScreen({ route, navigation }: Props) {
         durationMs: elapsedMs,
         score,
       });
-      let earnedXp = 0;
-      let earnedSp = 0;
+      const completionResult = await completeGameSession({
+        gameId: 'memory',
+        difficulty,
+        mode: isDaily ? 'daily' : 'normal',
+        won: true,
+        stageIndex,
+        metrics: {
+          durationMs: elapsedMs,
+          score,
+          mistakes: attempts,
+        },
+      });
 
-      if (isDaily) {
-        const stageResult = await completeDailyStage({
-          stageIndex,
-          gameId: 'memory',
-          difficulty,
-          result: {
-            durationMs: elapsedMs,
-            score,
-            mistakes: attempts,
-          },
-        });
-
-        if (stageResult.stageCompletedNow) {
-          await updateNeuroAfterGame({
-            gameId: 'memory',
-            difficulty,
-            won: true,
-            durationMs: elapsedMs,
-            score,
-            mistakes: attempts,
-            mode: 'daily',
-          });
-        }
-
-        if (stageResult.circuitCompletedNow) {
-          const { alreadyClaimed } = await claimDailyReward();
-          if (!alreadyClaimed) {
-            const profile = await getProfile();
-            const xpResult = await grantXp({
-              gameId: 'memory',
-              difficulty,
-              won: true,
-              durationMs: elapsedMs,
-              score,
-              mode: 'daily',
-              streakCurrent: profile.streakCurrent,
-            });
-            earnedXp = xpResult.earnedXp;
-
-            const spResult = await grantSeasonPoints({
-              gameId: 'memory',
-              difficulty,
-              durationMs: elapsedMs,
-              isDaily: true,
-              dailyCompletedAndClaimable: true,
-            });
-            earnedSp = spResult.earnedSeasonPoints;
-          }
-        }
-
-        const progress = getDailyProgress(stageResult.daily);
+      if (isDaily && completionResult.dailyCompletion) {
         await clearMemoryState();
         setSessionStarted(false);
         setFinishing(false);
 
-        const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
-        const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
         navigation.replace('DailyChallenge', {
-          completion: {
-            kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
-            stageIndex: completedStageIndex,
-            earnedXp,
-            earnedSp,
-            result: savedResult,
-            progress,
-          },
+          completion: completionResult.dailyCompletion,
         });
         return;
-      } else {
-        await updateNeuroAfterGame({
-          gameId: 'memory',
-          difficulty,
-          won: true,
-          durationMs: elapsedMs,
-          score,
-          mistakes: attempts,
-          mode: 'normal',
-        });
-
-        const xpResult = await grantXp({
-          gameId: 'memory',
-          difficulty,
-          won: true,
-          durationMs: elapsedMs,
-          score,
-          mode: 'normal',
-        });
-        earnedXp = xpResult.earnedXp;
-
-        const spResult = await grantSeasonPoints({
-          gameId: 'memory',
-          difficulty,
-          durationMs: elapsedMs,
-          isDaily: false,
-        });
-        earnedSp = spResult.earnedSeasonPoints;
       }
 
       await clearMemoryState();
       setSessionStarted(false);
-      Alert.alert('¡Memory completado!', `Score ${score} · +${earnedXp} XP · +${earnedSp} SP`);
+      Alert.alert(
+        '¡Memory completado!',
+        `Score ${score} · +${completionResult.earnedXp} XP · +${completionResult.earnedSp} SP`,
+      );
       setFinishing(false);
     };
     finalize();

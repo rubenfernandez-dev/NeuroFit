@@ -1,48 +1,35 @@
 import { Difficulty, GameId } from '../../games/types';
 import { getLeagueById, League } from './leagues';
 import { ensureSeasonCurrent, getProfile, updateProfile } from '../storage/profile';
+import { computeSp } from '../../core/gamification/economy';
 
 type CalcSeasonPointsInput = {
   gameId: GameId;
   difficulty: Difficulty;
+  score?: number;
   mistakes?: number;
   durationMs?: number;
   isDaily?: boolean;
+  // TODO: Kept for backward compatibility during economy migration.
+  // Current SP formula in computeSp does not use this flag yet.
   dailyCompletedAndClaimable?: boolean;
-};
-
-const difficultySeasonPoints: Record<Difficulty, number> = {
-  principiante: 40,
-  avanzado: 70,
-  experto: 120,
-  maestro: 200,
-  gran_maestro: 350,
 };
 
 export function calcSeasonPoints({
   difficulty,
-  mistakes = 0,
-  durationMs,
+  score = 0,
   isDaily,
   dailyCompletedAndClaimable,
 }: CalcSeasonPointsInput): number {
-  let points = difficultySeasonPoints[difficulty];
+  // TODO: Revisit whether dailyCompletedAndClaimable should affect SP.
+  // Intentionally no-op for now to preserve current behavior.
+  void dailyCompletedAndClaimable;
 
-  if (mistakes === 0) {
-    points += 20;
-  }
-
-  if (typeof durationMs === 'number' && durationMs > 0) {
-    if (durationMs <= 90_000) points += 30;
-    else if (durationMs <= 180_000) points += 20;
-    else if (durationMs <= 300_000) points += 10;
-  }
-
-  if (isDaily && dailyCompletedAndClaimable) {
-    points += 50;
-  }
-
-  return Math.max(0, points);
+  return computeSp({
+    score: Math.max(0, Math.min(100, Math.floor(score))),
+    difficulty,
+    isDaily: Boolean(isDaily),
+  });
 }
 
 export async function grantSeasonPoints(input: CalcSeasonPointsInput): Promise<{

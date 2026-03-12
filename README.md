@@ -1,175 +1,237 @@
 # NeuroFit
 
-**NeuroFit** es una app Expo React Native (TypeScript) de *fitness mental motivador*.
+NeuroFit es una app móvil de entrenamiento cognitivo construida con Expo + React Native + TypeScript.
 
-Slogan: **“Entrena tu mente como entrenas tu cuerpo”**
+Objetivo del proyecto: ofrecer sesiones cortas de juegos mentales con progresión, reto diario por etapas y gamificación local.
 
-## Setup (comandos)
+## Estado Actual Del Proyecto
 
-```bash
-# Crear proyecto Expo + TypeScript (si empiezas desde cero)
-npx create-expo-app@latest neurofit --template blank-typescript
-cd neurofit
+Este README refleja el estado real del código en marzo de 2026.
 
-# Dependencias requeridas
-npx expo install @react-navigation/native @react-navigation/native-stack react-native-gesture-handler react-native-reanimated react-native-screens react-native-safe-area-context expo-secure-store expo-asset
+- Stack activo: Expo 55, React Native 0.83, React 19, TypeScript.
+- Navegación: React Navigation (native stack).
+- Persistencia: Expo Secure Store (sin backend).
+- Testing: Vitest para lógica de dominio.
+- Plataforma objetivo principal: Android/iOS (web disponible en modo Expo, no priorizada).
 
-# Arrancar
-npx expo start
-```
+## Stack Y Dependencias
 
-> Este repo ya incluye `babel.config.js` con `react-native-reanimated/plugin`.
+Dependencias clave del proyecto:
 
-## Estructura
+- `expo`
+- `react-native`
+- `@react-navigation/native`
+- `@react-navigation/native-stack`
+- `expo-secure-store`
+- `expo-notifications`
+- `react-native-reanimated`
+- `react-native-gesture-handler`
+- `react-native-safe-area-context`
+- `react-native-screens`
+
+Herramientas de desarrollo:
+
+- `typescript`
+- `vitest`
+
+## Arquitectura
+
+La arquitectura está organizada por capas funcionales:
+
+- `src/app`: navegación y contrato de rutas.
+- `src/screens`: pantallas de producto (Home, Games, Daily, Progress, Leaderboard, Settings).
+- `src/games`: implementación por juego (UI, lógica y estado local de sesión).
+- `src/core`: lógica de dominio transversal de bajo nivel (economía, neuro score).
+- `src/shared`: servicios compartidos (gamificación, storage, utils, UI base, tema, notificaciones).
+
+Patrones activos:
+
+- Registro de juegos centralizado en `src/games/registry.ts`.
+- Params de rutas normalizados en `src/app/routes.ts` mediante `normalizeGameRouteParams`.
+- Flujo unificado de cierre de sesión en `src/shared/gamification/sessionCompletion.ts`.
+
+## Estructura De Carpetas (Resumen)
 
 ```txt
-assets/
-  icon.png
-  splash.png
-  adaptive-icon.png
-  favicon.png
-
 src/
   app/
     AppNavigator.tsx
     routes.ts
+
   screens/
     HomeScreen.tsx
     GamesScreen.tsx
     DailyChallengeScreen.tsx
+    LeaderboardScreen.tsx
     ProgressScreen.tsx
     SettingsScreen.tsx
+
+  core/
+    gamification/
+      economy.ts
+      neuroscore.ts
+
   games/
-    types.ts
     registry.ts
+    types.ts
     sudoku/
-      SudokuScreen.tsx
-      components/
-        SudokuGrid.tsx
-        SudokuCell.tsx
-        Keypad.tsx
-      logic/
-        generator.ts
-        solver.ts
-        difficulty.ts
-        validate.ts
-      model/
-        types.ts
-      storage/
-        sudokuState.ts
     memory/
-      MemoryScreen.tsx
-      logic/
-        deck.ts
-      components/
-        MemoryCard.tsx
-      storage/
-        memoryState.ts
     mentalmath/
-      MentalMathScreen.tsx
-      logic/
-        questions.ts
-      components/
-        HUD.tsx
-      storage/
-        mentalmathState.ts
-  shared/
-    theme/
-      colors.ts
-      spacing.ts
-      typography.ts
-      theme.ts
-    ui/
-      Button.tsx
-      Card.tsx
-      Pill.tsx
-      Divider.tsx
-      StatRow.tsx
+    speedmatch/
+    patternmemory/
+    focusgrid/
     storage/
-      keys.ts
-      stats.ts
-      daily.ts
-      profile.ts
+      persistence.ts
+
+  shared/
     gamification/
       levels.ts
+      leagues.ts
+      seasonPoints.ts
+      streak.ts
       xp.ts
+      sessionCompletion.ts
+    leaderboard/
+      leaderboard.ts
+    notifications/
+      notifications.ts
+    storage/
+      profile.ts
+      stats.ts
+      daily.ts
+      notifications.ts
+      secureStore.ts
+      keys.ts
+    ui/
+    theme/
     utils/
-      time.ts
-      random.ts
-      seed.ts
-      format.ts
 ```
 
-## Arquitectura modular (añadir juego nuevo)
+## Juegos Disponibles
 
-Objetivo plug & play: **crear carpeta + registrar + añadir ruta**.
+Actualmente hay 6 juegos habilitados:
 
-Pasos exactos:
-1. Crear carpeta `src/games/<nuevo-juego>/` con `Screen`, `logic`, `components`, `storage`.
-2. Exportar tipos/estado del juego si aplica.
-3. Añadir definición en `src/games/registry.ts` (`id`, `title`, `subtitle`, `icon`, `routeName`, `difficulties`, `enabled`).
-4. Añadir nuevo `routeName` en `src/app/routes.ts` (`RootStackParamList`).
-5. Registrar pantalla en `src/app/AppNavigator.tsx`.
-6. (Opcional) Incluir estado persistente propio usando `expo-secure-store`.
+- Sudoku
+- Memory
+- Mental Math
+- Speed Match
+- Pattern Memory
+- Focus Grid
 
-## Reto diario (seed + completado)
+Todos están registrados en `src/games/registry.ts` y expuestos en navegación en `src/app/AppNavigator.tsx`.
 
-`shared/storage/daily.ts`:
-- `ensureDailyToday()` genera un reto único por fecha si no existe.
-- Seed diaria determinista:
-  - fecha `YYYY-MM-DD`
-  - `seed = hash("YYYY-MM-DD" + "neurofit")`
-  - utilidades en `shared/utils/seed.ts` y `shared/utils/random.ts`.
-- Al completar juego en modo daily:
-  - `markDailyCompleted()`.
+## Daily Challenge (Estado Real)
 
-Cada juego recibe params:
-- `isDaily`
-- `dailySeed`
-- `dailyDateISO`
+El reto diario actual no es una sola partida: es un circuito de 3 etapas.
 
-Así puede elegir puzzle/deck/preguntas de forma determinista.
+Cómo funciona hoy:
 
-## XP y niveles
+- `ensureDailyToday()` crea o recupera el estado del día.
+- Se generan 3 etapas desde un pool de juegos/dificultades con semilla determinista.
+- Cada etapa se marca con `markDailyStageStarted()` y se completa con `completeDailyStage()`.
+- Al cerrar una partida, cada juego delega en `completeGameSession()`.
+- Cuando se completa la etapa 3:
+  - se marca circuito completo,
+  - se aplica streak,
+  - se intenta reclamar recompensa diaria una sola vez (`claimDailyReward`).
 
-Niveles en `shared/gamification/levels.ts`:
-- Bronze, Silver, Gold, Platinum, Diamond
-- cada uno con `id`, `name`, `minXp`, `badgeEmoji`
-- `getLevelByXp(xp)`
+Robustez implementada:
 
-XP en `shared/gamification/xp.ts`:
-- `calcXp({ gameId, difficulty, won, score, durationMs })`
-- fórmula MVP:
-  - base por sesión
-  - bonus por dificultad
-  - bonus por victoria
-  - bonus por rapidez
-  - bonus por rendimiento (score)
+- Serialización de mutaciones del daily en `daily.ts` para evitar carreras dentro del proceso.
+- Dedupe en vuelo en `sessionCompletion.ts` para evitar doble cierre diario en taps concurrentes.
 
-Al finalizar partida:
-1. `recordSession(...)`
-2. `grantXp(...)`
-3. recalcular `levelId` del perfil
-4. si `isDaily`, `markDailyCompleted()`
+## Gamificación
 
-## Pantallas
+Componentes principales:
 
-- `Home`: branding + 3 CTAs + tarjeta nivel actual.
-- `Games`: listado dinámico por `enabledGames()`.
-- `DailyChallenge`: reto diario con estado y navegación al juego.
-- `Progress`: sesiones, stats por juego, XP, nivel y progreso al siguiente nivel.
-- `Settings`: tema (`system/light/dark`) y reset de progreso con confirmación.
+- XP/SP: `src/core/gamification/economy.ts`
+  - cálculo por score normalizado,
+  - multiplicador por dificultad,
+  - bono fijo diario.
+- Niveles: `src/shared/gamification/levels.ts`.
+- Ligas/temporada: `src/shared/gamification/leagues.ts` + `profile.ts`.
+- NeuroScore: `src/core/gamification/neuroscore.ts` (dimensiones speed/memory/logic/attention).
 
-## Ejecutar
+Leaderboard semanal:
+
+- Se simula localmente con generación determinista (`src/shared/leaderboard/leaderboard.ts`).
+- No hay backend ni ranking global real multiusuario.
+
+## Persistencia Local
+
+Todo persiste en dispositivo vía Secure Store.
+
+Claves de persistencia activas:
+
+- Perfil: XP, nivel, liga, NeuroScore, dificultad preferida por juego.
+- Daily: estado del circuito diario, etapas y recompensa reclamada.
+- Stats: métricas acumuladas por juego.
+- Estados de sesión por juego: sudoku, memory, mentalmath, speedmatch, patternmemory, focusgrid.
+- Preferencias de notificaciones y programación local de recordatorio.
+
+## Zonas En Migración / Deuda Activa
+
+Estas áreas están vivas en el código y conviene conocerlas al entrar:
+
+- Compatibilidad de rutas:
+  - `mode` es fuente de verdad.
+  - `isDaily` sigue soportado como legado para compatibilidad.
+- Hardening de persistencia:
+  - ya aplicado en `memory` y `mentalmath` mediante normalización defensiva,
+  - pendiente de extender en el resto de storages de juego.
+- Funciones de stats marcadas como deprecadas:
+  - se mantienen por compatibilidad (`recordSession`, `recordSudokuStarted`, `recordSudokuOutcome`).
+
+## Limitaciones Actuales
+
+- Sin backend: no hay autenticación, sincronización cloud ni multi-dispositivo.
+- Leaderboard semanal simulado localmente.
+- Idempotencia diaria robusta dentro del proceso, pero sin garantías transaccionales entre procesos/dispositivos.
+- La app depende de estado local; al reinstalar se pierde progreso.
+- Cobertura de tests enfocada en dominio; UI no tiene suite de tests automatizada dedicada.
+
+## Ejecutar El Proyecto
+
+Requisitos:
+
+- Node.js LTS
+- npm
+- entorno Expo/Android Studio o Xcode según plataforma
+
+Instalación y arranque:
 
 ```bash
 npm install
 npx expo start
 ```
 
-## Notas MVP
+Comandos útiles:
 
-- Sudoku: tablero 9x9, keypad 1-9 + borrar, comprobar, conflictos y guardado.
-- Memory: flip/match, intentos, timer, grid por dificultad.
-- MentalMath: sesión de 60s, preguntas por dificultad, input numérico propio.
-- Persistencia segura con `expo-secure-store` para stats/perfil/daily/estado de partida.
+```bash
+# Android nativo
+npm run android
+
+# iOS nativo
+npm run ios
+
+# Web (no priorizada)
+npm run web
+
+# Tests de dominio
+npm run test:run
+
+# Typecheck
+npx tsc --noEmit
+```
+
+## Para Devs Nuevos
+
+Orden recomendado para entender el flujo:
+
+1. `src/app/routes.ts` y `src/app/AppNavigator.tsx`
+2. `src/games/registry.ts`
+3. `src/screens/DailyChallengeScreen.tsx`
+4. `src/shared/gamification/sessionCompletion.ts`
+5. `src/shared/storage/daily.ts`, `src/shared/storage/profile.ts`, `src/shared/storage/stats.ts`
+
+Con eso se entiende la mayor parte del comportamiento funcional actual del producto.

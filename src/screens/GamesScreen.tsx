@@ -21,6 +21,8 @@ export default function GamesScreen({ navigation }: Props) {
     memory: 'principiante',
     mentalmath: 'avanzado',
     speedmatch: 'avanzado',
+    patternmemory: 'avanzado',
+    focusgrid: 'avanzado',
   });
   const [modalVisible, setModalVisible] = React.useState(false);
   const [selectedGameId, setSelectedGameId] = React.useState<GameId | null>(null);
@@ -66,7 +68,6 @@ export default function GamesScreen({ navigation }: Props) {
       gameId: selectedGame.id,
       difficulty,
       mode: 'normal',
-      isDaily: false,
     });
   };
 

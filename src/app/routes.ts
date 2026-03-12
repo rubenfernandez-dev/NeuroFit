@@ -1,5 +1,7 @@
 import { Difficulty, GameId } from '../games/types';
 
+export type GameSessionMode = 'normal' | 'daily';
+
 export type DailyCompletionPayload = {
   kind: 'stage' | 'final';
   stageIndex: number;
@@ -21,14 +23,38 @@ export type DailyChallengeRouteParams = {
 };
 
 export type GameRouteParams = {
-  mode?: 'normal' | 'daily';
+  // Source of truth for session routing.
+  mode?: GameSessionMode;
   difficulty?: Difficulty;
+  // Legacy compatibility only. When mode is present, mode wins.
   isDaily?: boolean;
   dailySeed?: number;
   dailyDateISO?: string;
   stageIndex?: number;
   gameId?: GameId;
 };
+
+export type NormalizedGameRouteParams = Omit<GameRouteParams, 'mode' | 'isDaily'> & {
+  mode: GameSessionMode;
+  isDaily: boolean;
+};
+
+export function normalizeGameRouteParams(params?: GameRouteParams): NormalizedGameRouteParams {
+  const explicitMode = params?.mode;
+  const legacyIsDaily = params?.isDaily;
+
+  if (__DEV__ && explicitMode && typeof legacyIsDaily === 'boolean' && (explicitMode === 'daily') !== legacyIsDaily) {
+    console.warn('[Routes] Inconsistent game route params: mode takes precedence over legacy isDaily.', params);
+  }
+
+  const mode = explicitMode ?? (legacyIsDaily ? 'daily' : 'normal');
+
+  return {
+    ...(params ?? {}),
+    mode,
+    isDaily: mode === 'daily',
+  };
+}
 
 export type RootStackParamList = {
   Home: undefined;
@@ -41,4 +67,6 @@ export type RootStackParamList = {
   Memory: GameRouteParams | undefined;
   MentalMath: GameRouteParams | undefined;
   SpeedMatch: GameRouteParams | undefined;
+  PatternMemory: GameRouteParams | undefined;
+  FocusGrid: GameRouteParams | undefined;
 };

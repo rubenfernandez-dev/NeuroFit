@@ -31,8 +31,6 @@ const FIRST_NAMES = [
   'Teo',
 ];
 
-const SUFFIX = ['Mind', 'Zen', 'Pulse', 'Logic', 'Brain', 'Focus', 'Spark', 'Nova', 'Flow', 'Core'];
-
 function hashString(value: string): number {
   let hash = 2166136261;
   for (let i = 0; i < value.length; i += 1) {
@@ -43,9 +41,9 @@ function hashString(value: string): number {
 }
 
 function makeBotName(index: number, rng: () => number): string {
-  const first = FIRST_NAMES[index % FIRST_NAMES.length];
-  const second = SUFFIX[randomInt(0, SUFFIX.length - 1, rng)];
-  return `${first}${second}${String(index).padStart(2, '0')}`;
+  const offset = randomInt(0, FIRST_NAMES.length - 1, rng);
+  const nameIndex = (index + offset) % FIRST_NAMES.length;
+  return FIRST_NAMES[nameIndex];
 }
 
 type LeagueBandProfile = {
@@ -231,8 +229,9 @@ export async function generateWeeklyLeaderboard(params: {
   userName?: string;
   size?: number;
 }): Promise<LeaderboardEntry[]> {
-  const { seasonId, leagueId, userSeasonPoints, userName = 'Tú' } = params;
-  const safeSize = 50;
+  const { seasonId, leagueId, userSeasonPoints, userName = 'Tú', size } = params;
+  const requestedSize = typeof size === 'number' ? Math.floor(size) : 50;
+  const safeSize = clamp(requestedSize, 2, 200);
   const botsSize = Math.max(1, safeSize - 1);
   const profile = LEAGUE_BANDS[leagueId];
   const userPoints = Math.max(0, Math.floor(userSeasonPoints));
@@ -274,9 +273,10 @@ export async function getUserRankInWeeklyLeaderboard(params: {
     size: 50,
   });
 
-  return board.find((entry) => entry.isUser)?.rank ?? 50;
+  return board.find((entry) => entry.isUser)?.rank ?? board.length;
 }
 
+// TODO: Remove if we stop using this manual debug helper during leaderboard tuning.
 export async function debugWeeklyLeaderboardBands(seasonId = currentSeasonId()) {
   const [bronze, diamond] = await Promise.all([
     generateWeeklyLeaderboard({ seasonId, leagueId: 'bronze', userSeasonPoints: 0, userName: 'Tú' }),

@@ -82,10 +82,12 @@ export async function cancelDailyReminder(notificationId: string): Promise<void>
   await Notifications.cancelScheduledNotificationAsync(notificationId);
 }
 
+// TODO: Remove if settings/reset flows never need a global reminder cleanup action.
 export async function cancelAllReminders(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
+// TODO: Remove if the UI continues to rely on the persisted reminder time instead.
 export function getNextTriggerInfo(): string {
   const now = new Date();
   const next = new Date(now);

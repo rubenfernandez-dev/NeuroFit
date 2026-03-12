@@ -142,6 +142,8 @@ export default function SettingsScreen() {
       deleteItem(STORAGE_KEYS.sudokuState),
       deleteItem(STORAGE_KEYS.memoryState),
       deleteItem(STORAGE_KEYS.mentalMathState),
+      deleteItem(STORAGE_KEYS.patternMemoryState),
+      deleteItem(STORAGE_KEYS.focusGridState),
       deleteItem(STORAGE_KEYS.leaderboard),
     ]);
   };

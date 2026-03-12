@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../app/routes';
+import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { generateQuestions } from './logic/questions';
 import HUD from './components/HUD';
@@ -10,23 +10,18 @@ import Card from '../../shared/ui/Card';
 import { useAppTheme } from '../../shared/theme/theme';
 import { clearMentalMathState, getMentalMathState, saveMentalMathState } from './storage/mentalmathState';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
-import { grantXp } from '../../shared/gamification/xp';
-import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
-import { getProfile } from '../../shared/storage/profile';
+import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
-import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
+import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
 export default function MentalMathScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
-  const difficulty = normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty;
-  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
-  const dailyDateISO = route.params?.dailyDateISO;
-  const dailySeed = route.params?.dailySeed;
-  const stageIndex = route.params?.stageIndex;
+  const gameRoute = normalizeGameRouteParams(route.params);
+  const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
+  const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
 
   const [questions, setQuestions] = useState(generateQuestions(difficulty, 40, isDaily ? dailySeed : undefined));
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -137,117 +132,44 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     if (finishing || didFinish) return;
     setFinishing(true);
     setDidFinish(true);
+    const score = Math.max(0, Math.min(100, Math.round((correct / Math.max(1, questions.length)) * 100)));
     await trackWin({
       gameId: 'mentalmath',
       mode: isDaily ? 'daily' : 'normal',
       difficulty,
       durationMs: 60000,
-      score: correct,
+      score,
     });
-    let earnedXp = 0;
-    let earnedSp = 0;
+    const completionResult = await completeGameSession({
+      gameId: 'mentalmath',
+      difficulty,
+      mode: isDaily ? 'daily' : 'normal',
+      won: true,
+      stageIndex,
+      metrics: {
+        durationMs: 60_000,
+        score,
+        mistakes: wrong,
+      },
+    });
 
-    if (isDaily) {
-      const stageResult = await completeDailyStage({
-        stageIndex,
-        gameId: 'mentalmath',
-        difficulty,
-        result: {
-          durationMs: 60_000,
-          score: correct,
-          mistakes: wrong,
-        },
-      });
-
-      if (stageResult.stageCompletedNow) {
-        await updateNeuroAfterGame({
-          gameId: 'mentalmath',
-          difficulty,
-          won: true,
-          durationMs: 60_000,
-          score: correct,
-          mistakes: wrong,
-          mode: 'daily',
-        });
-      }
-
-      if (stageResult.circuitCompletedNow) {
-        const { alreadyClaimed } = await claimDailyReward();
-        if (!alreadyClaimed) {
-          const profile = await getProfile();
-          const xpResult = await grantXp({
-            gameId: 'mentalmath',
-            difficulty,
-            won: true,
-            durationMs: 60000,
-            score: correct,
-            mode: 'daily',
-            streakCurrent: profile.streakCurrent,
-          });
-          earnedXp = xpResult.earnedXp;
-
-          const spResult = await grantSeasonPoints({
-            gameId: 'mentalmath',
-            difficulty,
-            durationMs: 60000,
-            isDaily: true,
-            dailyCompletedAndClaimable: true,
-          });
-          earnedSp = spResult.earnedSeasonPoints;
-        }
-      }
-
-      const progress = getDailyProgress(stageResult.daily);
+    if (isDaily && completionResult.dailyCompletion) {
       await clearMentalMathState();
       setSessionStarted(false);
       setFinishing(false);
 
-      const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
-      const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
       navigation.replace('DailyChallenge', {
-        completion: {
-          kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
-          stageIndex: completedStageIndex,
-          earnedXp,
-          earnedSp,
-          result: savedResult,
-          progress,
-        },
+        completion: completionResult.dailyCompletion,
       });
       return;
-    } else {
-      await updateNeuroAfterGame({
-        gameId: 'mentalmath',
-        difficulty,
-        won: true,
-        durationMs: 60_000,
-        score: correct,
-        mistakes: wrong,
-        mode: 'normal',
-      });
-
-      const xpResult = await grantXp({
-        gameId: 'mentalmath',
-        difficulty,
-        won: true,
-        durationMs: 60000,
-        score: correct,
-        mode: 'normal',
-      });
-      earnedXp = xpResult.earnedXp;
-
-      const spResult = await grantSeasonPoints({
-        gameId: 'mentalmath',
-        difficulty,
-        durationMs: 60000,
-        isDaily: false,
-      });
-      earnedSp = spResult.earnedSeasonPoints;
     }
 
     await clearMentalMathState();
     setSessionStarted(false);
-    Alert.alert('Sesión terminada', `Aciertos: ${correct} · +${earnedXp} XP · +${earnedSp} SP`);
+    Alert.alert(
+      'Sesión terminada',
+      `Aciertos: ${correct} · +${completionResult.earnedXp} XP · +${completionResult.earnedSp} SP`,
+    );
     setFinishing(false);
   };
 

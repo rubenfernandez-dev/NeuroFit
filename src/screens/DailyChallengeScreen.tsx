@@ -20,6 +20,8 @@ function getGameLabel(gameId: string): string {
   if (gameId === 'memory') return 'Memory';
   if (gameId === 'sudoku') return 'Sudoku';
   if (gameId === 'speedmatch') return 'Speed Match';
+  if (gameId === 'patternmemory') return 'Pattern Memory';
+  if (gameId === 'focusgrid') return 'Focus Grid';
   return gameId;
 }
 
@@ -196,7 +198,6 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
       gameId: currentStage.gameId,
       difficulty: currentStage.difficulty,
       mode: 'daily',
-      isDaily: true,
       dailyDateISO: daily.lastDailyDateISO,
       dailySeed: currentStage.seed,
       stageIndex: daily.currentStageIndex,

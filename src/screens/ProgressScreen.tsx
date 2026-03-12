@@ -11,7 +11,7 @@ import { getLeagueById } from '../shared/gamification/leagues';
 import Screen from '../shared/ui/Screen';
 import ProgressBar from '../shared/ui/ProgressBar';
 import Pill from '../shared/ui/Pill';
-import { todayISODate } from '../shared/utils/time';
+import { isIsoTimestampOnLocalDay } from '../shared/utils/time';
 
 type Snapshot = {
   xpTotal: number;
@@ -103,7 +103,7 @@ export default function ProgressScreen() {
   const neuroUpdatedLabel = useMemo(() => {
     if (!snapshot.neuro.updatedAtISO) return 'sin actualizar';
     const day = snapshot.neuro.updatedAtISO.slice(0, 10);
-    return day === todayISODate() ? 'hoy' : day;
+    return isIsoTimestampOnLocalDay(snapshot.neuro.updatedAtISO) ? 'hoy' : day;
   }, [snapshot.neuro.updatedAtISO]);
 
   const progress = nextLevel

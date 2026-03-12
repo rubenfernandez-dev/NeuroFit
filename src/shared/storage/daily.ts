@@ -1,14 +1,15 @@
 import { Difficulty, GameId, normalizeDifficulty } from '../../games/types';
 import { STORAGE_KEYS } from './keys';
-import { todayISODate } from '../utils/time';
+import { getLocalDayKey, getUtcDayKey } from '../utils/time';
 import { createSeededRng, pickOne, randomInt } from '../utils/random';
 import { getDailySeed } from '../utils/seed';
 import { deleteItem, getItem, setItem } from './secureStore';
 import { getProfile, updateProfile } from './profile';
 import { applyDailyCompletionToStreak } from '../gamification/streak';
 import { nowISO } from '../utils/time';
+import { migrateLegacyUtcDailyToLocalDay } from './dailyDay';
 
-type DailyStageGameId = 'mentalmath' | 'memory' | 'sudoku' | 'speedmatch';
+type DailyStageGameId = 'mentalmath' | 'memory' | 'sudoku' | 'speedmatch' | 'patternmemory' | 'focusgrid';
 
 export type DailyStageResult = {
   durationMs?: number;
@@ -49,8 +50,16 @@ type CompleteDailyStageInput = {
   result?: DailyStageResult;
 };
 
-const DAILY_STAGE_POOL: DailyStageGameId[] = ['mentalmath', 'memory', 'sudoku', 'speedmatch'];
+const DAILY_STAGE_POOL: DailyStageGameId[] = ['mentalmath', 'memory', 'sudoku', 'speedmatch', 'patternmemory', 'focusgrid'];
 const DIFFICULTY_POOL: Difficulty[] = ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'];
+
+let dailyMutationQueue: Promise<void> = Promise.resolve();
+
+function runDailyMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = dailyMutationQueue.then(operation, operation);
+  dailyMutationQueue = next.then(() => undefined, () => undefined);
+  return next;
+}
 
 function getCurrentStageIndex(stages: DailyStage[]): number {
   const pendingIndex = stages.findIndex((stage) => !stage.completed);
@@ -106,7 +115,7 @@ const defaultDaily = (dateISO: string): DailyState => {
 function normalizeStage(stage: unknown, fallback: DailyStage): DailyStage {
   if (!stage || typeof stage !== 'object') return fallback;
   const parsed = stage as Partial<DailyStage>;
-  const gameId = parsed.gameId === 'mentalmath' || parsed.gameId === 'memory' || parsed.gameId === 'sudoku' || parsed.gameId === 'speedmatch'
+  const gameId = parsed.gameId === 'mentalmath' || parsed.gameId === 'memory' || parsed.gameId === 'sudoku' || parsed.gameId === 'speedmatch' || parsed.gameId === 'patternmemory' || parsed.gameId === 'focusgrid'
     ? parsed.gameId
     : fallback.gameId;
 
@@ -191,31 +200,37 @@ export async function getDaily(): Promise<DailyState | null> {
 
 export async function ensureDailyToday(): Promise<DailyState> {
   const current = await getDaily();
-  const todayISO = todayISODate();
-  if (current && current.lastDailyDateISO === todayISO) {
-    const completed = current.completed || current.stages.every((stage) => stage.completed);
-    const status = deriveStatus(current.stages, completed);
+  const localTodayKey = getLocalDayKey();
+  const utcTodayKey = getUtcDayKey();
+  const migratedCurrent = current ? migrateLegacyUtcDailyToLocalDay(current, localTodayKey, utcTodayKey) : null;
+  const effectiveCurrent = migratedCurrent ?? current;
+
+  if (effectiveCurrent && effectiveCurrent.lastDailyDateISO === localTodayKey) {
+    const currentDaily = effectiveCurrent;
+    const completed = currentDaily.completed || currentDaily.stages.every((stage) => stage.completed);
+    const status = deriveStatus(currentDaily.stages, completed);
     const normalized: DailyState = {
-      ...current,
-      dateISO: current.lastDailyDateISO,
-      currentStageIndex: completed ? 3 : getCurrentStageIndex(current.stages),
+      ...currentDaily,
+      dateISO: localTodayKey,
+      lastDailyDateISO: localTodayKey,
+      currentStageIndex: completed ? 3 : getCurrentStageIndex(currentDaily.stages),
       completed,
       status,
-      claimedRewardAtISO: current.rewardClaimed ? current.claimedRewardAtISO ?? nowISO() : undefined,
+      claimedRewardAtISO: currentDaily.rewardClaimed ? currentDaily.claimedRewardAtISO ?? nowISO() : undefined,
     };
 
-    if (JSON.stringify(normalized) !== JSON.stringify(current)) {
+    if (JSON.stringify(normalized) !== JSON.stringify(currentDaily)) {
       await setItem(STORAGE_KEYS.daily, JSON.stringify(normalized));
     }
     return normalized;
   }
 
-  const fresh = defaultDaily(todayISO);
+  const fresh = defaultDaily(localTodayKey);
   await setItem(STORAGE_KEYS.daily, JSON.stringify(fresh));
   return fresh;
 }
 
-export async function markDailyCompleted(): Promise<DailyState> {
+async function markDailyCompletedInternal(): Promise<DailyState> {
   const current = (await ensureDailyToday()) as DailyState;
   const todayISO = current.lastDailyDateISO;
   const next: DailyState = current.completed
@@ -249,88 +264,94 @@ export async function markDailyCompleted(): Promise<DailyState> {
   return next;
 }
 
+export async function markDailyCompleted(): Promise<DailyState> {
+  return runDailyMutation(markDailyCompletedInternal);
+}
+
 export async function completeDailyStage(input: CompleteDailyStageInput): Promise<{
   daily: DailyState;
   stageCompletedNow: boolean;
   circuitCompletedNow: boolean;
   alreadyCompleted: boolean;
 }> {
-  const current = await ensureDailyToday();
+  return runDailyMutation(async () => {
+    const current = await ensureDailyToday();
 
-  if (current.completed) {
-    return {
-      daily: current,
-      stageCompletedNow: false,
-      circuitCompletedNow: false,
-      alreadyCompleted: true,
+    if (current.completed) {
+      return {
+        daily: current,
+        stageCompletedNow: false,
+        circuitCompletedNow: false,
+        alreadyCompleted: true,
+      };
+    }
+
+    const index = typeof input.stageIndex === 'number'
+      ? Math.max(0, Math.min(2, Math.floor(input.stageIndex)))
+      : current.currentStageIndex;
+
+    const stage = current.stages[index];
+    if (!stage || stage.gameId !== input.gameId) {
+      return {
+        daily: current,
+        stageCompletedNow: false,
+        circuitCompletedNow: false,
+        alreadyCompleted: false,
+      };
+    }
+
+    if (stage.completed) {
+      return {
+        daily: current,
+        stageCompletedNow: false,
+        circuitCompletedNow: false,
+        alreadyCompleted: true,
+      };
+    }
+
+    const nextStages = current.stages.map((entry, stageIndex) =>
+      stageIndex === index
+        ? {
+            ...entry,
+            completed: true,
+            difficulty: normalizeDifficulty(input.difficulty, entry.difficulty),
+            startedAtISO: entry.startedAtISO ?? nowISO(),
+            completedAtISO: nowISO(),
+            result: normalizeResult(input.result),
+          }
+        : entry,
+    ) as [DailyStage, DailyStage, DailyStage];
+
+    const allCompleted = nextStages.every((entry) => entry.completed);
+    const next: DailyState = {
+      ...current,
+      stages: nextStages,
+      status: allCompleted ? 'completed' : 'in_progress',
+      completed: allCompleted,
+      currentStageIndex: allCompleted ? 3 : getCurrentStageIndex(nextStages),
+      startedAtISO: current.startedAtISO ?? nowISO(),
+      completedAtISO: allCompleted ? current.completedAtISO ?? nowISO() : undefined,
     };
-  }
 
-  const index = typeof input.stageIndex === 'number'
-    ? Math.max(0, Math.min(2, Math.floor(input.stageIndex)))
-    : current.currentStageIndex;
+    await setItem(STORAGE_KEYS.daily, JSON.stringify(next));
 
-  const stage = current.stages[index];
-  if (!stage || stage.gameId !== input.gameId) {
+    if (allCompleted) {
+      const marked = await markDailyCompletedInternal();
+      return {
+        daily: marked,
+        stageCompletedNow: true,
+        circuitCompletedNow: true,
+        alreadyCompleted: false,
+      };
+    }
+
     return {
-      daily: current,
-      stageCompletedNow: false,
-      circuitCompletedNow: false,
-      alreadyCompleted: false,
-    };
-  }
-
-  if (stage.completed) {
-    return {
-      daily: current,
-      stageCompletedNow: false,
-      circuitCompletedNow: false,
-      alreadyCompleted: true,
-    };
-  }
-
-  const nextStages = current.stages.map((entry, stageIndex) =>
-    stageIndex === index
-      ? {
-          ...entry,
-          completed: true,
-          difficulty: normalizeDifficulty(input.difficulty, entry.difficulty),
-          startedAtISO: entry.startedAtISO ?? nowISO(),
-          completedAtISO: nowISO(),
-          result: normalizeResult(input.result),
-        }
-      : entry,
-  ) as [DailyStage, DailyStage, DailyStage];
-
-  const allCompleted = nextStages.every((entry) => entry.completed);
-  const next: DailyState = {
-    ...current,
-    stages: nextStages,
-    status: allCompleted ? 'completed' : 'in_progress',
-    completed: allCompleted,
-    currentStageIndex: allCompleted ? 3 : getCurrentStageIndex(nextStages),
-    startedAtISO: current.startedAtISO ?? nowISO(),
-    completedAtISO: allCompleted ? current.completedAtISO ?? nowISO() : undefined,
-  };
-
-  await setItem(STORAGE_KEYS.daily, JSON.stringify(next));
-
-  if (allCompleted) {
-    const marked = await markDailyCompleted();
-    return {
-      daily: marked,
+      daily: next,
       stageCompletedNow: true,
-      circuitCompletedNow: true,
+      circuitCompletedNow: false,
       alreadyCompleted: false,
     };
-  }
-
-  return {
-    daily: next,
-    stageCompletedNow: true,
-    circuitCompletedNow: false,
-    alreadyCompleted: false,
-  };
+  });
 }
 
 export function getDailyProgress(daily: DailyState): { completedStages: number; totalStages: number } {
@@ -341,55 +362,61 @@ export function getDailyProgress(daily: DailyState): { completedStages: number; 
 }
 
 export async function markDailyStageStarted(input: { stageIndex?: number; gameId: GameId }): Promise<DailyState> {
-  const current = await ensureDailyToday();
-  if (current.completed) return current;
+  return runDailyMutation(async () => {
+    const current = await ensureDailyToday();
+    if (current.completed) return current;
 
-  const index = typeof input.stageIndex === 'number'
-    ? Math.max(0, Math.min(2, Math.floor(input.stageIndex)))
-    : current.currentStageIndex;
+    const index = typeof input.stageIndex === 'number'
+      ? Math.max(0, Math.min(2, Math.floor(input.stageIndex)))
+      : current.currentStageIndex;
 
-  const stage = current.stages[index];
-  if (!stage || stage.gameId !== input.gameId || stage.completed) {
-    return current;
-  }
+    const stage = current.stages[index];
+    if (!stage || stage.gameId !== input.gameId || stage.completed) {
+      return current;
+    }
 
-  if (stage.startedAtISO && current.startedAtISO && current.status === 'in_progress') {
-    return current;
-  }
+    if (stage.startedAtISO && current.startedAtISO && current.status === 'in_progress') {
+      return current;
+    }
 
-  const nextStages = current.stages.map((entry, stageIndex) =>
-    stageIndex === index
-      ? { ...entry, startedAtISO: entry.startedAtISO ?? nowISO() }
-      : entry,
-  ) as [DailyStage, DailyStage, DailyStage];
+    const nextStages = current.stages.map((entry, stageIndex) =>
+      stageIndex === index
+        ? { ...entry, startedAtISO: entry.startedAtISO ?? nowISO() }
+        : entry,
+    ) as [DailyStage, DailyStage, DailyStage];
 
-  const next: DailyState = {
-    ...current,
-    stages: nextStages,
-    status: 'in_progress',
-    startedAtISO: current.startedAtISO ?? nowISO(),
-  };
+    const next: DailyState = {
+      ...current,
+      stages: nextStages,
+      status: 'in_progress',
+      startedAtISO: current.startedAtISO ?? nowISO(),
+    };
 
-  await setItem(STORAGE_KEYS.daily, JSON.stringify(next));
-  return next;
+    await setItem(STORAGE_KEYS.daily, JSON.stringify(next));
+    return next;
+  });
 }
 
 export async function claimDailyReward(): Promise<{ daily: DailyState; alreadyClaimed: boolean }> {
-  const daily = await ensureDailyToday();
+  return runDailyMutation(async () => {
+    const daily = await ensureDailyToday();
 
-  if (!daily.completed) {
-    return { daily, alreadyClaimed: false };
-  }
+    if (!daily.completed) {
+      return { daily, alreadyClaimed: false };
+    }
 
-  if (daily.rewardClaimed) {
-    return { daily, alreadyClaimed: true };
-  }
+    if (daily.rewardClaimed) {
+      return { daily, alreadyClaimed: true };
+    }
 
-  const claimed: DailyState = { ...daily, rewardClaimed: true, claimedRewardAtISO: nowISO() };
-  await setItem(STORAGE_KEYS.daily, JSON.stringify(claimed));
-  return { daily: claimed, alreadyClaimed: false };
+    const claimed: DailyState = { ...daily, rewardClaimed: true, claimedRewardAtISO: nowISO() };
+    await setItem(STORAGE_KEYS.daily, JSON.stringify(claimed));
+    return { daily: claimed, alreadyClaimed: false };
+  });
 }
 
 export async function resetDaily() {
-  await deleteItem(STORAGE_KEYS.daily);
+  await runDailyMutation(async () => {
+    await deleteItem(STORAGE_KEYS.daily);
+  });
 }

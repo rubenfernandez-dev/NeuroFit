@@ -37,6 +37,24 @@ export const GAMES: GameDefinition[] = [
     difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
     enabled: true,
   },
+  {
+    id: 'patternmemory',
+    title: 'Pattern Memory',
+    subtitle: 'Memoriza y repite patrones crecientes',
+    icon: '🟦',
+    routeName: 'PatternMemory',
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
+    enabled: true,
+  },
+  {
+    id: 'focusgrid',
+    title: 'Focus Grid',
+    subtitle: 'Toca numeros en orden ascendente',
+    icon: '🔢',
+    routeName: 'FocusGrid',
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
+    enabled: true,
+  },
 ];
 
 export function enabledGames() {

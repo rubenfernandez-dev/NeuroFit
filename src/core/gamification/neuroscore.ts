@@ -22,12 +22,16 @@ type NeuroDelta = {
 };
 
 type NeuroWeights = Record<NeuroDims, number>;
+const DEFAULT_NEURO_WEIGHTS: NeuroWeights = { speed: 0.5, memory: 0, logic: 0.3, attention: 0.2 };
 
-const WEIGHTS_BY_GAME: Record<GameId, NeuroWeights> = {
+
+const WEIGHTS_BY_GAME: Partial<Record<GameId, NeuroWeights>> = {
   sudoku: { speed: 0, memory: 0, logic: 0.7, attention: 0.3 },
   memory: { speed: 0, memory: 0.7, logic: 0, attention: 0.3 },
   mentalmath: { speed: 0.5, memory: 0, logic: 0.3, attention: 0.2 },
   speedmatch: { speed: 0.6, memory: 0, logic: 0, attention: 0.4 },
+  patternmemory: { speed: 0, memory: 0.7, logic: 0, attention: 0.3 },
+  focusgrid: { speed: 0.3, memory: 0, logic: 0.2, attention: 0.5 },
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -65,6 +69,20 @@ function computePerformanceNormalized(input: NeuroScoreInput): number {
     return clamp(correctRate * 0.75 + timeFactor * 0.25, 0, 1);
   }
 
+  if (input.gameId === 'patternmemory') {
+    const scoreNormalized = clamp((input.score ?? 0) / 100, 0, 1);
+    const timeFactor = mapTimeFactor(input.durationMs, 35_000, 120_000);
+    const penalty = clamp(mistakes / 12, 0, 1) * 0.15;
+    return clamp(scoreNormalized * 0.85 + timeFactor * 0.15 - penalty, 0, 1);
+  }
+
+  if (input.gameId === 'focusgrid') {
+    const scoreNormalized = clamp((input.score ?? 0) / 100, 0, 1);
+    const timeFactor = mapTimeFactor(input.durationMs, 30_000, 80_000);
+    const penalty = clamp(mistakes / 20, 0, 1) * 0.2;
+    return clamp(scoreNormalized * 0.8 + timeFactor * 0.2 - penalty, 0, 1);
+  }
+
   const correct = Math.max(0, input.score ?? 0);
   const total = Math.max(1, correct + mistakes);
   const correctRate = clamp(correct / total, 0, 1);
@@ -73,7 +91,7 @@ function computePerformanceNormalized(input: NeuroScoreInput): number {
 }
 
 export function computeNeuroDelta(input: NeuroScoreInput): NeuroDelta {
-  const weights = WEIGHTS_BY_GAME[input.gameId] ?? WEIGHTS_BY_GAME.mentalmath;
+  const weights = WEIGHTS_BY_GAME[input.gameId] ?? DEFAULT_NEURO_WEIGHTS;
   const performance = computePerformanceNormalized(input);
   const modeMultiplier = input.mode === 'daily' ? 1.15 : 1;
   const deltaRaw = (performance - 0.5) * 8 * modeMultiplier;

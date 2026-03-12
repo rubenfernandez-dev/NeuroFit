@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Modal, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../app/routes';
+import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
@@ -11,12 +11,9 @@ import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { createSeededRng, pickOne } from '../../shared/utils/random';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
-import { grantXp } from '../../shared/gamification/xp';
-import { grantSeasonPoints } from '../../shared/gamification/seasonPoints';
-import { claimDailyReward, completeDailyStage, ensureDailyToday, getDailyProgress, markDailyStageStarted } from '../../shared/storage/daily';
-import { getProfile } from '../../shared/storage/profile';
-import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
+import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { clearSpeedMatchState, getSpeedMatchState, saveSpeedMatchState } from './storage/speedmatchState';
+import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
 
@@ -81,11 +78,9 @@ function createSession(symbolPool: string[], durationSec: number, sessionSeed: n
 
 export default function SpeedMatchScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
-  const difficulty = normalizeDifficulty(route.params?.difficulty, 'avanzado') as Difficulty;
-  const isDaily = route.params?.mode === 'daily' || !!route.params?.isDaily;
-  const dailyDateISO = route.params?.dailyDateISO;
-  const dailySeed = route.params?.dailySeed;
-  const stageIndex = route.params?.stageIndex;
+  const gameRoute = normalizeGameRouteParams(route.params);
+  const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
+  const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
   const config = SPEEDMATCH_CONFIG[difficulty];
   const symbolPool = useMemo(() => SYMBOL_LIBRARY.slice(0, config.symbolCount), [config.symbolCount]);
 
@@ -218,124 +213,47 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     const elapsedMs = Math.max(0, (config.durationSec - timeLeft) * 1000);
     const totalAnswers = correct + mistakes;
     const accuracyPct = Math.round((correct / Math.max(1, totalAnswers)) * 100);
+    const rewardScore = Math.max(0, Math.min(100, accuracyPct));
 
     await trackWin({
       gameId: 'speedmatch',
       mode: isDaily ? 'daily' : 'normal',
       difficulty,
       durationMs: elapsedMs,
-      score,
+      score: rewardScore,
       mistakes,
     });
 
-    let earnedXp = 0;
-    let earnedSp = 0;
+    const completionResult = await completeGameSession({
+      gameId: 'speedmatch',
+      difficulty,
+      mode: isDaily ? 'daily' : 'normal',
+      won: true,
+      stageIndex,
+      metrics: {
+        durationMs: elapsedMs,
+        score: rewardScore,
+        mistakes,
+      },
+      neuroScoreOverride: isDaily ? correct : undefined,
+    });
 
-    if (isDaily) {
-      const stageResult = await completeDailyStage({
-        stageIndex,
-        gameId: 'speedmatch',
-        difficulty,
-        result: {
-          durationMs: elapsedMs,
-          score,
-          mistakes,
-        },
-      });
-
-      if (stageResult.stageCompletedNow) {
-        await updateNeuroAfterGame({
-          gameId: 'speedmatch',
-          difficulty,
-          won: true,
-          durationMs: elapsedMs,
-          score: correct,
-          mistakes,
-          mode: 'daily',
-        });
-      }
-
-      if (stageResult.circuitCompletedNow) {
-        const { alreadyClaimed } = await claimDailyReward();
-        if (!alreadyClaimed) {
-          const profile = await getProfile();
-          const xpResult = await grantXp({
-            gameId: 'speedmatch',
-            difficulty,
-            won: true,
-            durationMs: elapsedMs,
-            score: accuracyPct,
-            mode: 'daily',
-            streakCurrent: profile.streakCurrent,
-          });
-          earnedXp = xpResult.earnedXp;
-
-          const spResult = await grantSeasonPoints({
-            gameId: 'speedmatch',
-            difficulty,
-            durationMs: elapsedMs,
-            mistakes,
-            isDaily: true,
-            dailyCompletedAndClaimable: true,
-          });
-          earnedSp = spResult.earnedSeasonPoints;
-        }
-      }
-
-      const progress = getDailyProgress(stageResult.daily);
+    if (isDaily && completionResult.dailyCompletion) {
       await clearSpeedMatchState();
       setSessionStarted(false);
       setFinishing(false);
 
-      const completedStageIndex = typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
-      const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
       navigation.replace('DailyChallenge', {
-        completion: {
-          kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
-          stageIndex: completedStageIndex,
-          earnedXp,
-          earnedSp,
-          result: savedResult,
-          progress,
-        },
+        completion: completionResult.dailyCompletion,
       });
       return;
     }
 
-    await updateNeuroAfterGame({
-      gameId: 'speedmatch',
-      difficulty,
-      won: true,
-      durationMs: elapsedMs,
-      score: correct,
-      mistakes,
-      mode: 'normal',
-    });
-
-    const xpResult = await grantXp({
-      gameId: 'speedmatch',
-      difficulty,
-      won: true,
-      durationMs: elapsedMs,
-      score: accuracyPct,
-      mode: 'normal',
-    });
-    earnedXp = xpResult.earnedXp;
-
-    const spResult = await grantSeasonPoints({
-      gameId: 'speedmatch',
-      difficulty,
-      durationMs: elapsedMs,
-      mistakes,
-      isDaily: false,
-    });
-    earnedSp = spResult.earnedSeasonPoints;
-
     await clearSpeedMatchState();
     setSessionStarted(false);
     setResultSummary({
-      earnedXp,
-      earnedSp,
+      earnedXp: completionResult.earnedXp,
+      earnedSp: completionResult.earnedSp,
       elapsedMs,
       correct,
       mistakes,
