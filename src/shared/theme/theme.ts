@@ -61,8 +61,16 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   );
 
   const setPreference = async (value: ThemePreference) => {
+    const previousPreference = preference;
     setPreferenceState(value);
-    await updateProfile({ themePreference: value });
+
+    try {
+      await updateProfile({ themePreference: value });
+    } catch (error) {
+      setPreferenceState(previousPreference);
+      captureException(error, { area: 'theme.setPreference', value, previousPreference });
+      throw error;
+    }
   };
 
   const value = useMemo(

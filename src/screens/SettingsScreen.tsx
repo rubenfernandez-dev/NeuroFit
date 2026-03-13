@@ -29,11 +29,20 @@ import { captureException, logWarning } from '../shared/observability';
 
 const options: ThemePreference[] = ['system', 'light', 'dark'];
 
+type SettingsStatus = {
+  kind: 'success' | 'warning' | 'error';
+  text: string;
+};
+
 export default function SettingsScreen() {
   const { theme, preference, setPreference } = useAppTheme();
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [feedbackPrefs, setFeedbackPrefs] = useState<FeedbackPrefs | null>(null);
   const [permissionsDenied, setPermissionsDenied] = useState(false);
+  const [status, setStatus] = useState<SettingsStatus | null>(null);
+  const [isUpdatingTheme, setIsUpdatingTheme] = useState(false);
+  const [isUpdatingReminder, setIsUpdatingReminder] = useState(false);
+  const [isUpdatingFeedback, setIsUpdatingFeedback] = useState(false);
 
   useEffect(() => {
     const hydrateSettings = async () => {
@@ -45,13 +54,28 @@ export default function SettingsScreen() {
         setPrefs(notificationPrefs);
         setFeedbackPrefs(nextFeedbackPrefs);
         updateGameFeedbackPreferences(nextFeedbackPrefs);
+        setPermissionsDenied(false);
       } catch (error) {
         captureException(error, { area: 'settings.hydration' });
+        setStatus({ kind: 'error', text: 'No pudimos cargar tus ajustes. Intenta de nuevo.' });
       }
     };
 
     hydrateSettings();
   }, []);
+
+  const reloadNotificationPrefs = async () => {
+    const nextPrefs = await getNotificationPrefs();
+    setPrefs(nextPrefs);
+    return nextPrefs;
+  };
+
+  const reloadFeedbackPrefs = async () => {
+    const nextPrefs = await getFeedbackPrefs();
+    setFeedbackPrefs(nextPrefs);
+    updateGameFeedbackPreferences(nextPrefs);
+    return nextPrefs;
+  };
 
   const displayTime = useMemo(() => {
     const hour = String(prefs?.hour ?? 20).padStart(2, '0');
@@ -73,37 +97,81 @@ export default function SettingsScreen() {
   };
 
   const toggleReminder = async (enabled: boolean) => {
-    const current = prefs ?? (await getNotificationPrefs());
+    if (isUpdatingReminder) return;
+    setIsUpdatingReminder(true);
+    setStatus(null);
 
-    if (!enabled) {
-      if (current.notificationId) {
+    const current = prefs ?? (await getNotificationPrefs());
+    let scheduledNotificationId: string | undefined;
+
+    try {
+      if (!enabled) {
+        if (current.notificationId) {
+          await cancelDailyReminder(current.notificationId);
+        }
+        const updated = await updateNotificationPrefs({ enabled: false, notificationId: undefined });
+        setPrefs(updated);
+        setPermissionsDenied(false);
+        setStatus({ kind: 'success', text: 'Recordatorio desactivado.' });
+        return;
+      }
+
+      let granted = false;
+      try {
+        granted = await requestNotifPermissions();
+      } catch (error) {
+        captureException(error, { area: 'settings.toggleReminder', step: 'request_permission' });
+        setPermissionsDenied(false);
+        setStatus({ kind: 'error', text: 'No pudimos solicitar permisos de notificaciones.' });
+        await reloadNotificationPrefs();
+        return;
+      }
+
+      if (!granted) {
+        if (current.notificationId) {
+          await cancelDailyReminder(current.notificationId);
+        }
+        const updated = await updateNotificationPrefs({ enabled: false, notificationId: undefined });
+        setPrefs(updated);
+        setPermissionsDenied(true);
+        setStatus({ kind: 'warning', text: 'Permiso de notificaciones denegado. El recordatorio sigue desactivado.' });
+        return;
+      }
+
+      await ensureAndroidChannel();
+      scheduledNotificationId = await scheduleDailyReminder(current.hour, current.minute);
+      const updated = await updateNotificationPrefs({ enabled: true, notificationId: scheduledNotificationId });
+
+      if (current.notificationId && current.notificationId !== scheduledNotificationId) {
         await cancelDailyReminder(current.notificationId);
       }
-      const updated = await updateNotificationPrefs({ enabled: false, notificationId: undefined });
+
       setPrefs(updated);
       setPermissionsDenied(false);
-      return;
-    }
+      setStatus({ kind: 'success', text: `Recordatorio activado a las ${String(updated.hour).padStart(2, '0')}:${String(updated.minute).padStart(2, '0')}.` });
+    } catch (error) {
+      captureException(error, { area: 'settings.toggleReminder', enabled });
 
-    const granted = await requestNotifPermissions();
-    if (!granted) {
-      if (current.notificationId) {
-        await cancelDailyReminder(current.notificationId);
+      if (scheduledNotificationId) {
+        try {
+          await cancelDailyReminder(scheduledNotificationId);
+        } catch (cancelError) {
+          captureException(cancelError, { area: 'settings.toggleReminder', step: 'rollback_cancel_new_notification' });
+        }
       }
-      const updated = await updateNotificationPrefs({ enabled: false, notificationId: undefined });
-      setPrefs(updated);
-      setPermissionsDenied(true);
-      return;
-    }
 
-    await ensureAndroidChannel();
-    const notificationId = await scheduleDailyReminder(current.hour, current.minute);
-    const updated = await updateNotificationPrefs({ enabled: true, notificationId });
-    setPrefs(updated);
-    setPermissionsDenied(false);
+      await reloadNotificationPrefs();
+      setStatus({ kind: 'error', text: 'No pudimos actualizar el recordatorio. Revisa permisos e inténtalo de nuevo.' });
+    } finally {
+      setIsUpdatingReminder(false);
+    }
   };
 
   const updateTime = async (kind: 'hour' | 'minute', delta: number) => {
+    if (isUpdatingReminder) return;
+    setIsUpdatingReminder(true);
+    setStatus(null);
+
     const current = prefs ?? (await getNotificationPrefs());
     const hour =
       kind === 'hour'
@@ -115,16 +183,56 @@ export default function SettingsScreen() {
         : current.minute;
 
     let nextId = current.notificationId;
-    if (current.enabled) {
-      if (current.notificationId) {
+    let newlyScheduledId: string | undefined;
+
+    try {
+      if (current.enabled) {
+        await ensureAndroidChannel();
+        newlyScheduledId = await scheduleDailyReminder(hour, minute);
+        nextId = newlyScheduledId;
+      }
+
+      const updated = await updateNotificationPrefs({ hour, minute, notificationId: nextId });
+
+      if (current.enabled && current.notificationId && newlyScheduledId && current.notificationId !== newlyScheduledId) {
         await cancelDailyReminder(current.notificationId);
       }
-      await ensureAndroidChannel();
-      nextId = await scheduleDailyReminder(hour, minute);
-    }
 
-    const updated = await updateNotificationPrefs({ hour, minute, notificationId: nextId });
-    setPrefs(updated);
+      setPrefs(updated);
+      setPermissionsDenied(false);
+      setStatus({ kind: 'success', text: `Hora de recordatorio actualizada a ${String(updated.hour).padStart(2, '0')}:${String(updated.minute).padStart(2, '0')}.` });
+    } catch (error) {
+      captureException(error, { area: 'settings.updateReminderTime', kind, delta });
+
+      if (newlyScheduledId) {
+        try {
+          await cancelDailyReminder(newlyScheduledId);
+        } catch (cancelError) {
+          captureException(cancelError, { area: 'settings.updateReminderTime', step: 'rollback_cancel_new_notification' });
+        }
+      }
+
+      await reloadNotificationPrefs();
+      setStatus({ kind: 'error', text: 'No pudimos actualizar la hora del recordatorio.' });
+    } finally {
+      setIsUpdatingReminder(false);
+    }
+  };
+
+  const applyThemePreference = async (nextPreference: ThemePreference) => {
+    if (isUpdatingTheme || nextPreference === preference) return;
+    setIsUpdatingTheme(true);
+    setStatus(null);
+
+    try {
+      await setPreference(nextPreference);
+      setStatus({ kind: 'success', text: 'Tema actualizado.' });
+    } catch (error) {
+      captureException(error, { area: 'settings.setTheme', nextPreference });
+      setStatus({ kind: 'error', text: 'No pudimos guardar el tema. Se restauró el valor anterior.' });
+    } finally {
+      setIsUpdatingTheme(false);
+    }
   };
 
   const openSystemSettings = async () => {
@@ -175,15 +283,34 @@ export default function SettingsScreen() {
   };
 
   const toggleFeedback = async (partial: Partial<FeedbackPrefs>) => {
-    const next = await updateFeedbackPrefs(partial);
-    setFeedbackPrefs(next);
-    updateGameFeedbackPreferences(next);
+    if (isUpdatingFeedback) return;
+    setIsUpdatingFeedback(true);
+    setStatus(null);
+
+    try {
+      const next = await updateFeedbackPrefs(partial);
+      setFeedbackPrefs(next);
+      updateGameFeedbackPreferences(next);
+      setStatus({ kind: 'success', text: 'Ajustes de feedback actualizados.' });
+    } catch (error) {
+      captureException(error, { area: 'settings.toggleFeedback', partial });
+      await reloadFeedbackPrefs();
+      setStatus({ kind: 'error', text: 'No pudimos guardar los ajustes de feedback.' });
+    } finally {
+      setIsUpdatingFeedback(false);
+    }
   };
 
   const masterFeedbackEnabled = feedbackPrefs?.enabled ?? true;
 
   return (
     <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
+      {status ? (
+        <Card variant={status.kind === 'success' ? 'success' : 'warning'}>
+          <Text style={[theme.typography.bodySmall, { color: status.kind === 'success' ? theme.colors.green : theme.colors.red }]}>{status.text}</Text>
+        </Card>
+      ) : null}
+
       <Card>
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Tema</Text>
         <View style={{ gap: 8, marginTop: 10 }}>
@@ -192,7 +319,10 @@ export default function SettingsScreen() {
               key={option}
               title={option === preference ? `✓ ${option}` : option}
               variant={option === preference ? 'primary' : 'secondary'}
-              onPress={() => setPreference(option)}
+              onPress={() => {
+                applyThemePreference(option);
+              }}
+              disabled={isUpdatingTheme}
             />
           ))}
         </View>
@@ -205,6 +335,7 @@ export default function SettingsScreen() {
           <Switch
             value={prefs?.enabled ?? false}
             onValueChange={toggleReminder}
+            disabled={isUpdatingReminder}
             trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
             thumbColor={prefs?.enabled ? theme.colors.primary : theme.colors.textMuted}
           />
@@ -222,12 +353,12 @@ export default function SettingsScreen() {
         <View style={{ marginTop: 14, gap: 8 }}>
           <Text style={[theme.typography.body, { color: theme.colors.text }]}>Hora: {displayTime}</Text>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="Hora -" variant="secondary" onPress={() => updateTime('hour', -1)} style={{ flex: 1 }} />
-            <Button title="Hora +" variant="secondary" onPress={() => updateTime('hour', 1)} style={{ flex: 1 }} />
+            <Button title="Hora -" variant="secondary" onPress={() => updateTime('hour', -1)} style={{ flex: 1 }} disabled={isUpdatingReminder} />
+            <Button title="Hora +" variant="secondary" onPress={() => updateTime('hour', 1)} style={{ flex: 1 }} disabled={isUpdatingReminder} />
           </View>
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Button title="Min -5" variant="secondary" onPress={() => updateTime('minute', -5)} style={{ flex: 1 }} />
-            <Button title="Min +5" variant="secondary" onPress={() => updateTime('minute', 5)} style={{ flex: 1 }} />
+            <Button title="Min -5" variant="secondary" onPress={() => updateTime('minute', -5)} style={{ flex: 1 }} disabled={isUpdatingReminder} />
+            <Button title="Min +5" variant="secondary" onPress={() => updateTime('minute', 5)} style={{ flex: 1 }} disabled={isUpdatingReminder} />
           </View>
         </View>
       </Card>
@@ -243,6 +374,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 toggleFeedback({ enabled: value });
               }}
+              disabled={isUpdatingFeedback}
               trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
               thumbColor={masterFeedbackEnabled ? theme.colors.primary : theme.colors.textMuted}
             />
@@ -255,7 +387,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 toggleFeedback({ soundEnabled: value });
               }}
-              disabled={!masterFeedbackEnabled}
+              disabled={!masterFeedbackEnabled || isUpdatingFeedback}
               trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
               thumbColor={feedbackPrefs?.soundEnabled ? theme.colors.primary : theme.colors.textMuted}
             />
@@ -268,7 +400,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 toggleFeedback({ hapticsEnabled: value });
               }}
-              disabled={!masterFeedbackEnabled}
+              disabled={!masterFeedbackEnabled || isUpdatingFeedback}
               trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
               thumbColor={feedbackPrefs?.hapticsEnabled ? theme.colors.primary : theme.colors.textMuted}
             />
@@ -281,7 +413,7 @@ export default function SettingsScreen() {
               onValueChange={(value) => {
                 toggleFeedback({ celebrationEnabled: value });
               }}
-              disabled={!masterFeedbackEnabled}
+              disabled={!masterFeedbackEnabled || isUpdatingFeedback}
               trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
               thumbColor={feedbackPrefs?.celebrationEnabled ? theme.colors.primary : theme.colors.textMuted}
             />

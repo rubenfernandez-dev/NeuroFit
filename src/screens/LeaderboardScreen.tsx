@@ -9,6 +9,8 @@ import { getLeagueById, getNextLeague } from '../shared/gamification/leagues';
 import Screen from '../shared/ui/Screen';
 import Pill from '../shared/ui/Pill';
 import ProgressBar from '../shared/ui/ProgressBar';
+import Button from '../shared/ui/Button';
+import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 
 export default function LeaderboardScreen() {
   const { theme } = useAppTheme();
@@ -17,22 +19,35 @@ export default function LeaderboardScreen() {
   const [seasonPoints, setSeasonPoints] = useState(0);
   const [leagueId, setLeagueId] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'grand_master' | 'legend'>('bronze');
   const [rank, setRank] = useState(50);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const profile = await ensureSeasonCurrent();
-    const board = await generateWeeklyLeaderboard({
-      seasonId: profile.seasonId,
-      leagueId: profile.leagueId,
-      userSeasonPoints: profile.seasonPoints,
-      userName: 'Tú',
-      size: 50,
-    });
+    setIsLoading(true);
+    try {
+      const profile = await ensureSeasonCurrent();
+      const board = await generateWeeklyLeaderboard({
+        seasonId: profile.seasonId,
+        leagueId: profile.leagueId,
+        userSeasonPoints: profile.seasonPoints,
+        userName: 'Tú',
+        size: 50,
+      });
 
-    setSeasonId(profile.seasonId);
-    setSeasonPoints(profile.seasonPoints);
-    setLeagueId(profile.leagueId);
-    setEntries(board);
-    setRank(board.find((entry) => entry.isUser)?.rank ?? 50);
+      setSeasonId(profile.seasonId);
+      setSeasonPoints(profile.seasonPoints);
+      setLeagueId(profile.leagueId);
+      setEntries(board);
+      setRank(board.find((entry) => entry.isUser)?.rank ?? 50);
+      setLoadError(null);
+    } catch (error) {
+      const kind = classifyDataFailure(error);
+      captureException(error, { area: 'leaderboard.load', kind });
+      setLoadError(formatLoadFailureMessage(kind));
+      setEntries([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -55,6 +70,15 @@ export default function LeaderboardScreen() {
 
   return (
     <Screen>
+      {loadError ? (
+        <Card variant="warning">
+          <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>
+          <View style={{ marginTop: 10 }}>
+            <Button title="Reintentar" onPress={load} variant="secondary" />
+          </View>
+        </Card>
+      ) : null}
+
       <Card variant="primary">
         <Text style={[theme.typography.h2, { color: theme.colors.text }]}>
           {league.badgeEmoji} Liga {league.name}
@@ -83,7 +107,11 @@ export default function LeaderboardScreen() {
           <Text style={[theme.typography.caption, { color: theme.colors.red }]}>Zona de descenso (Últimos 10)</Text>
         </View>
 
-        {entries.map((entry) => (
+        {isLoading ? (
+          <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>Cargando ranking local...</Text>
+        ) : entries.length === 0 ? (
+          <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>No pudimos generar el ranking ahora mismo.</Text>
+        ) : entries.map((entry) => (
           <View
             key={`${entry.name}-${entry.rank}`}
             style={{

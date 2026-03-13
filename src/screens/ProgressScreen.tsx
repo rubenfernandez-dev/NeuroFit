@@ -33,6 +33,13 @@ type Snapshot = {
   stats: Awaited<ReturnType<typeof getAllStats>>;
 };
 
+const GAME_PROGRESS_LABELS = {
+  sessions: 'Sesiones',
+  bestScore: 'Mejor puntuación',
+  bestTime: 'Mejor tiempo',
+  avgMistakesSudoku: 'Fallos medios (Sudoku)',
+} as const;
+
 export default function ProgressScreen() {
   const { theme } = useAppTheme();
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -171,7 +178,7 @@ export default function ProgressScreen() {
       </Card>
 
       <Card variant="success">
-        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Stats Sudoku</Text>
+        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Estadísticas de Sudoku</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 10 }}>
           <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
             <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Partidas</Text>
@@ -182,7 +189,7 @@ export default function ProgressScreen() {
             <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 2 }]}>{sudokuCompleted}</Text>
           </View>
           <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
-            <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Win rate</Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>Tasa de victoria</Text>
             <Text style={[theme.typography.h2, { color: theme.colors.green, marginTop: 2 }]}>{sudokuWinRate}</Text>
           </View>
           <View style={{ width: '48%', backgroundColor: theme.colors.bg0, borderRadius: 14, padding: 10, borderWidth: 1, borderColor: theme.colors.border }}>
@@ -200,10 +207,13 @@ export default function ProgressScreen() {
               {game.icon} {game.title}
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <Pill label={`Sesiones ${stat?.sessions ?? 0}`} tone="default" />
-              <Pill label={`Best score ${stat?.bestScore ?? '-'}`} tone="pink" />
+              <Pill label={`${GAME_PROGRESS_LABELS.sessions} ${stat?.sessions ?? 0}`} tone="default" />
+              <Pill label={`${GAME_PROGRESS_LABELS.bestScore} ${stat?.bestScore ?? '-'}`} tone="pink" />
             </View>
-            <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 8 }]}>Best time: {stat?.bestTimeMs ?? '-'} ms · Fallos medios Sudoku: {sudokuAvgMistakes}</Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 8 }]}>
+              {GAME_PROGRESS_LABELS.bestTime}: {stat?.bestTimeMs ?? '-'} ms
+              {game.id === 'sudoku' ? ` · ${GAME_PROGRESS_LABELS.avgMistakesSudoku}: ${sudokuAvgMistakes}` : ''}
+            </Text>
           </Card>
         );
       })}

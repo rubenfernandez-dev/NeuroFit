@@ -216,22 +216,34 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         (!isDaily || saved.dailyDateISO === dailyDateISO)
       ) {
         if (!mounted) return;
+        const restoredDidFinish = Boolean(saved.didFinish || saved.phase === 'finished');
+        // Safety-first restore:
+        // if the app was interrupted while sequence playback or answer input was active,
+        // replay the current round from the beginning so the user is never asked to
+        // continue from a sequence they may not have fully seen.
+        const needsSafeRoundReplay = !restoredDidFinish && (saved.phase === 'showing' || saved.phase === 'input');
+        const restoredPhase: Phase = restoredDidFinish
+          ? 'finished'
+          : needsSafeRoundReplay
+            ? 'idle'
+            : saved.phase;
+
         setSequence(saved.sequence);
         setStartedAtISO(typeof saved.startedAtISO === 'string' ? saved.startedAtISO : nowISO());
         setRound(saved.round);
         setMaxSequence(saved.maxSequence);
-        setInputIndex(saved.inputIndex);
-        setPhase(saved.phase === 'showing' ? 'input' : saved.phase);
+        setInputIndex(needsSafeRoundReplay ? 0 : saved.inputIndex);
+        setPhase(restoredPhase);
         setCorrectTaps(saved.correctTaps);
         setTotalTaps(saved.totalTaps);
         setMistakes(saved.mistakes);
         setReactionAccumMs(saved.reactionAccumMs);
         setReactionSamples(saved.reactionSamples);
-        setPromptAtMs(saved.promptAtMs);
+        setPromptAtMs(needsSafeRoundReplay ? 0 : saved.promptAtMs);
         setTimeLeft(saved.timeLeft);
         setSessionSeed(saved.sessionSeed);
         setSessionStarted(Boolean(saved.sessionStarted));
-        setDidFinish(Boolean(saved.didFinish));
+        setDidFinish(restoredDidFinish);
 
         if (!saved.sessionStarted) {
           await trackSessionStart({ gameId: 'patternmemory', mode: isDaily ? 'daily' : 'normal' });
@@ -463,6 +475,15 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     playSequence(sequence);
   }, [dailyBlockedReason, didFinish, phase, playSequence, sequence]);
 
+  const primaryActionTitle = useMemo(() => {
+    if (phase === 'finished') return 'Empezar';
+    if (phase === 'showing') return 'Repetir secuencia';
+    // In idle we may be at the beginning of the game or after a safe restore.
+    // Round > 1 means user is mid-session, so "Repetir" is clearer than "Empezar".
+    if (phase === 'idle' && round > 1) return 'Repetir secuencia';
+    return 'Empezar';
+  }, [phase, round]);
+
   const handleTilePress = useCallback(
     (tileId: TileId) => {
       if (dailyBlockedReason || phase !== 'input' || didFinish || finishing) return;
@@ -623,7 +644,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            title={phase === 'idle' || phase === 'finished' ? 'Empezar' : 'Repetir secuencia'}
+            title={primaryActionTitle}
             onPress={startOrContinue}
             disabled={!!dailyBlockedReason || didFinish || phase === 'showing'}
             style={{ flex: 1 }}

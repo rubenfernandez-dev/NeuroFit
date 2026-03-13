@@ -12,6 +12,8 @@ import { useAppTheme } from '../shared/theme/theme';
 import { getProfile } from '../shared/storage/profile';
 import Screen from '../shared/ui/Screen';
 import PrimaryButton from '../shared/ui/PrimaryButton';
+import Button from '../shared/ui/Button';
+import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyChallenge'>;
 
@@ -163,6 +165,8 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   const completion = route.params?.completion;
   const [daily, setDaily] = useState<Awaited<ReturnType<typeof ensureDailyToday>> | null>(null);
   const [streakCurrent, setStreakCurrent] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showFinalConfetti, setShowFinalConfetti] = useState(completion?.kind === 'final');
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
@@ -204,12 +208,27 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
     });
   }, [currentStage, daily, navigation]);
 
-  const load = useCallback(() => {
-    Promise.all([ensureDailyToday(), getProfile()]).then(([dailyState, profile]) => {
+  const load = useCallback(async () => {
+    if (!mountedRef.current) return;
+    setIsLoading(true);
+
+    try {
+      const [dailyState, profile] = await Promise.all([ensureDailyToday(), getProfile()]);
       if (!mountedRef.current) return;
       setDaily(dailyState);
       setStreakCurrent(profile.streakCurrent);
-    });
+      setLoadError(null);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      const kind = classifyDataFailure(error);
+      captureException(error, { area: 'daily.load', kind });
+      setLoadError(formatLoadFailureMessage(kind));
+      setDaily(null);
+    } finally {
+      if (mountedRef.current) {
+        setIsLoading(false);
+      }
+    }
   }, []);
 
   useFocusEffect(
@@ -267,9 +286,19 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   // Root cause fixed: all hooks now run before any conditional return, keeping hook order stable across renders.
   if (!daily) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: theme.colors.textMuted }}>Cargando reto...</Text>
-      </View>
+      <Screen scroll={false} contentStyle={{ flex: 1, justifyContent: 'center' }}>
+        <Card variant={loadError ? 'warning' : 'primary'}>
+          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Reto diario</Text>
+          <Text style={[theme.typography.bodySmall, { color: loadError ? theme.colors.red : theme.colors.textMuted, marginTop: 8 }]}>
+            {loadError ?? (isLoading ? 'Cargando reto...' : 'No pudimos cargar el reto diario.')}
+          </Text>
+          {!isLoading ? (
+            <View style={{ marginTop: 12 }}>
+              <Button title="Reintentar" onPress={load} variant="secondary" />
+            </View>
+          ) : null}
+        </Card>
+      </Screen>
     );
   }
 
@@ -339,7 +368,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
           </Text>
 
           <View style={{ width: '100%', marginTop: 16 }}>
-            <PrimaryButton title="Ver resumen" onPress={clearCompletion} style={{ minHeight: 56, borderRadius: 18 }} />
+            <PrimaryButton title="Volver al reto diario" onPress={clearCompletion} style={{ minHeight: 56, borderRadius: 18 }} />
           </View>
         </Card>
       </Screen>

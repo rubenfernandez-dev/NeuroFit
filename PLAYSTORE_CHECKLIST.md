@@ -80,8 +80,19 @@ Avoid in listing text:
 
 ## 6. Final Technical Checks
 
-1. Build signed release AAB
-2. Verify merged release manifest from final build
-3. Smoke test startup, notifications, settings, and each game flow
-4. Validate crash-reporting mode (ON/OFF) matches listing/privacy docs
-5. Run typecheck and tests before tagging release
+Current validated status:
+
+- `android\\gradlew.bat assembleDebug`: OK
+- `android\\gradlew.bat assembleRelease`: OK
+- `android\\gradlew.bat bundleRelease`: OK
+- Unsent signed-config state: release signing still needs real `NEUROFIT_UPLOAD_*` credentials
+- Known limitation: `android\\gradlew.bat clean assembleRelease` can fail in `:app:externalNativeBuildCleanDebug` due to native clean/autolinking codegen paths with New Architecture
+
+Before upload:
+
+1. Provide real upload keystore and `NEUROFIT_UPLOAD_*` secrets
+2. Build signed release AAB
+3. Verify merged release manifest from final build
+4. Smoke test startup, notifications, settings, and each game flow
+5. Validate crash-reporting mode (ON/OFF) matches listing/privacy docs
+6. Run typecheck and tests before tagging release

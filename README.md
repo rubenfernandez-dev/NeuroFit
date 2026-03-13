@@ -236,6 +236,28 @@ En merge de release tambien aparecen permisos transitivos de librerias (por ejem
 5. Preparar ficha (titulo corto/largo, descripcion, screenshots, icon, feature graphic).
 6. Validar que el copy de tienda no prometa backend ni competicion global real.
 
+### Estado Android Release Validado
+
+Validaciones tecnicas ya confirmadas en este repo:
+
+- `android\\gradlew.bat assembleDebug` -> OK
+- `android\\gradlew.bat assembleRelease` -> OK
+- `android\\gradlew.bat bundleRelease` -> OK
+- Salida AAB generada en `android/app/build/outputs/bundle/release/app-release.aab`
+
+Estado de signing actual:
+
+- El wiring de release signing ya existe en Gradle.
+- `signingReport` sigue mostrando release sin store/alias configurados mientras no se definan las propiedades `NEUROFIT_UPLOAD_*`.
+- Sin esas credenciales, el proyecto genera artefactos release validos para verificacion tecnica, pero no una AAB firmada final para subida a Play Console.
+
+Limitacion tecnica abierta:
+
+- `android\\gradlew.bat clean assembleRelease` puede fallar en `:app:externalNativeBuildCleanDebug`.
+- El fallo actual apunta a autolinking/codegen JNI faltante durante el clean nativo con New Architecture en dependencias como Sentry, gesture-handler, reanimated y worklets.
+- No bloquea `assembleRelease` ni `bundleRelease` en el estado actual del repo.
+- No se dejo ningun workaround permanente en Gradle para este punto porque los intentos probados no resolvieron la causa real.
+
 ## Zonas En Migración / Deuda Activa
 
 Estas áreas están vivas en el código y conviene conocerlas al entrar:

@@ -10,6 +10,8 @@ import { Difficulty, difficultyLabel, GameId } from '../games/types';
 import Screen from '../shared/ui/Screen';
 import { getProfile, setPreferredDifficulty } from '../shared/storage/profile';
 import DifficultyModal from '../components/DifficultyModal';
+import Button from '../shared/ui/Button';
+import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Games'>;
 
@@ -27,13 +29,25 @@ export default function GamesScreen({ navigation }: Props) {
   const [modalVisible, setModalVisible] = React.useState(false);
   const [selectedGameId, setSelectedGameId] = React.useState<GameId | null>(null);
   const [selectedDifficulty, setSelectedDifficulty] = React.useState<Difficulty>('principiante');
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = React.useState(0);
 
   useFocusEffect(
     React.useCallback(() => {
-      getProfile().then((profile) => {
-        setPreferred(profile.preferredDifficultyByGame);
-      });
-    }, []),
+      const load = async () => {
+        try {
+          const profile = await getProfile();
+          setPreferred(profile.preferredDifficultyByGame);
+          setLoadError(null);
+        } catch (error) {
+          const kind = classifyDataFailure(error);
+          captureException(error, { area: 'games.load', kind });
+          setLoadError(formatLoadFailureMessage(kind));
+        }
+      };
+
+      load();
+    }, [reloadNonce]),
   );
 
   const selectedGame = selectedGameId ? games.find((game) => game.id === selectedGameId) ?? null : null;
@@ -73,6 +87,15 @@ export default function GamesScreen({ navigation }: Props) {
 
   return (
     <Screen>
+      {loadError ? (
+        <Card variant="warning">
+          <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>
+          <View style={{ marginTop: 10 }}>
+            <Button title="Reintentar carga" onPress={() => setReloadNonce((current) => current + 1)} variant="secondary" />
+          </View>
+        </Card>
+      ) : null}
+
       {games.map((game) => (
         <Pressable
           key={game.id}
