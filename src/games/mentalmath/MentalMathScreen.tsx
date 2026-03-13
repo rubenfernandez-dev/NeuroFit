@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
@@ -14,6 +14,7 @@ import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/da
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
+import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
@@ -109,22 +110,45 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     return () => clearInterval(timer);
   }, [sessionStarted, didFinish, dailyBlockedReason]);
 
+  // Ref keeps the full save payload current on every render.
+  const mentalMathPersistRef = useRef<Parameters<typeof saveMentalMathState>[0] | null>(null);
+  mentalMathPersistRef.current = {
+    questions,
+    currentIndex,
+    correct,
+    wrong,
+    timeLeft,
+    inputValue,
+    sessionStarted,
+    didFinish,
+    difficulty,
+    isDaily,
+    dailyDateISO,
+    seed: dailySeed,
+  };
+
+  // Persist on answer submissions (currentIndex / correct / wrong change).
+  // timeLeft is excluded — it ticks every second.
+  // inputValue is excluded — it is ephemeral (re-entering on restore is low-cost).
+  // Both are still captured via the ref when the effect fires on meaningful events.
   useEffect(() => {
-    saveMentalMathState({
-      questions,
-      currentIndex,
-      correct,
-      wrong,
-      timeLeft,
-      inputValue,
-      sessionStarted,
-      didFinish,
-      difficulty,
-      isDaily,
-      dailyDateISO,
-      seed: dailySeed,
-    });
-  }, [questions, currentIndex, correct, wrong, timeLeft, inputValue, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed]);
+    const p = mentalMathPersistRef.current;
+    if (!p) return;
+    saveMentalMathState(p);
+  }, [questions, currentIndex, correct, wrong, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed]);
+
+  // Checkpoint every 30 s + save on unmount (handles back-navigation mid-game).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = mentalMathPersistRef.current;
+      if (p?.sessionStarted && !p.didFinish) saveMentalMathState(p);
+    }, 30_000);
+    return () => {
+      clearInterval(id);
+      const p = mentalMathPersistRef.current;
+      if (p?.sessionStarted && !p.didFinish) saveMentalMathState(p);
+    };
+  }, []);
 
   const current = useMemo(() => questions[currentIndex % questions.length], [questions, currentIndex]);
 
@@ -154,6 +178,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     });
 
     if (isDaily && completionResult.dailyCompletion) {
+      void playVictoryFeedback();
       await clearMentalMathState();
       setSessionStarted(false);
       setFinishing(false);
@@ -166,6 +191,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
     await clearMentalMathState();
     setSessionStarted(false);
+    void playVictoryFeedback();
     Alert.alert(
       'Sesión terminada',
       `Aciertos: ${correct} · +${completionResult.earnedXp} XP · +${completionResult.earnedSp} SP`,
@@ -184,8 +210,13 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     const answer = Number(inputValue);
     if (!Number.isFinite(answer)) return;
 
-    if (answer === current.answer) setCorrect((prev) => prev + 1);
-    else setWrong((prev) => prev + 1);
+    if (answer === current.answer) {
+      void playSuccessFeedback();
+      setCorrect((prev) => prev + 1);
+    } else {
+      void playErrorFeedback();
+      setWrong((prev) => prev + 1);
+    }
 
     setCurrentIndex((prev) => prev + 1);
     setInputValue('');

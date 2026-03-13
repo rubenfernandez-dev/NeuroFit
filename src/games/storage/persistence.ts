@@ -1,4 +1,5 @@
 import { Difficulty, normalizeDifficulty } from '../types';
+import { logWarning } from '../../shared/observability';
 
 export function parseStoredObject(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
@@ -6,7 +7,10 @@ export function parseStoredObject(raw: string | null): Record<string, unknown> |
   try {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-  } catch {
+  } catch (error) {
+    logWarning('storage.game.parse_failed', {
+      reason: error instanceof Error ? error.message : 'unknown_error',
+    });
     return null;
   }
 }

@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import SudokuCell from './SudokuCell';
 import { useAppTheme } from '../../../shared/theme/theme';
 import { SudokuCellPosition } from '../model/types';
+import { getCellHighlightState } from './highlight';
 
 type SudokuGridProps = {
   size: number;
@@ -29,10 +30,13 @@ export default function SudokuGrid({ size, grid, notes, givens, selectedIndex, c
         <View key={row} style={{ flexDirection: 'row' }}>
           {Array.from({ length: 9 }).map((__, col) => {
             const index = row * 9 + col;
-            const sameRow = row === selectedRow;
-            const sameCol = col === selectedCol;
-            const sameBox = Math.floor(row / 3) === Math.floor(selectedRow / 3) && Math.floor(col / 3) === Math.floor(selectedCol / 3);
-            const matchValue = selectedValue !== 0 && grid[row][col] === selectedValue;
+            const highlight = getCellHighlightState({
+              row,
+              col,
+              selectedIndex,
+              selectedValue,
+              cellValue: grid[row][col],
+            });
             const isError = !!errorCell && errorCell.row === row && errorCell.col === col;
 
             return (
@@ -49,12 +53,12 @@ export default function SudokuGrid({ size, grid, notes, givens, selectedIndex, c
                   notes={notes[row][col]}
                   size={cellSize}
                   fixed={givens[row][col]}
-                  selected={selectedIndex === index}
+                  selected={highlight.selected}
                   conflict={conflicts.has(index)}
                   error={isError}
-                  inLineHighlight={sameRow || sameCol}
-                  inBoxHighlight={sameBox}
-                  valueMatchHighlight={matchValue}
+                  inLineHighlight={highlight.rowOrCol}
+                  inBoxHighlight={highlight.box}
+                  valueMatchHighlight={highlight.valueMatch}
                   onPress={() => {
                     if (!locked) {
                       onSelect(index);

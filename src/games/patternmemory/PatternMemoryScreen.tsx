@@ -25,6 +25,7 @@ import {
 import { PatternMemoryFinishReason, PatternMemoryGameResult, TileId } from './types';
 import { clearPatternMemoryState, getPatternMemoryState, savePatternMemoryState } from './storage/patternMemoryState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
+import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatternMemory'>;
 
@@ -260,52 +261,57 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     return () => clearInterval(timer);
   }, [dailyBlockedReason, didFinish, sessionStarted]);
 
+  // Ref keeps the full save payload current on every render.
+  const patternPersistRef = useRef<Parameters<typeof savePatternMemoryState>[0] | null>(null);
+  patternPersistRef.current = sequence.length > 0
+    ? {
+        startedAtISO,
+        sequence,
+        round,
+        maxSequence,
+        inputIndex,
+        phase,
+        correctTaps,
+        totalTaps,
+        mistakes,
+        reactionAccumMs,
+        reactionSamples,
+        promptAtMs,
+        timeLeft,
+        sessionSeed,
+        sessionStarted,
+        didFinish,
+        difficulty,
+        isDaily,
+        dailyDateISO,
+        seed: dailySeed,
+      }
+    : null;
+
+  // Persist on round completion and significant game events (phase / round / sequence / mistakes).
+  // Per-tap counters (correctTaps, totalTaps, reactionAccumMs, reactionSamples, promptAtMs,
+  // inputIndex) and timeLeft are excluded — they fire on every tap / every second.
+  // All are still captured via the ref on the next round-level save or checkpoint.
   useEffect(() => {
-    if (sequence.length === 0) return;
-    savePatternMemoryState({
-      startedAtISO,
-      sequence,
-      round,
-      maxSequence,
-      inputIndex,
-      phase,
-      correctTaps,
-      totalTaps,
-      mistakes,
-      reactionAccumMs,
-      reactionSamples,
-      promptAtMs,
-      timeLeft,
-      sessionSeed,
-      sessionStarted,
-      didFinish,
-      difficulty,
-      isDaily,
-      dailyDateISO,
-      seed: dailySeed,
-    });
-  }, [
-    correctTaps,
-    dailyDateISO,
-    dailySeed,
-    didFinish,
-    difficulty,
-    inputIndex,
-    isDaily,
-    startedAtISO,
-    maxSequence,
-    mistakes,
-    phase,
-    promptAtMs,
-    reactionAccumMs,
-    reactionSamples,
-    round,
-    sequence,
-    sessionSeed,
-    sessionStarted,
-    timeLeft,
-    totalTaps,
-  ]);
+    const p = patternPersistRef.current;
+    if (!p) return;
+    savePatternMemoryState(p);
+  }, [round, sequence, maxSequence, phase, mistakes, sessionSeed, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed, startedAtISO]);
+
+  // Checkpoint every 15 s + save on unmount (handles back-navigation mid-game).
+  // 15 s because pattern rounds can be short and the round-level save may be infrequent
+  // in early difficulties.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = patternPersistRef.current;
+      if (p?.sessionStarted && !p.didFinish) savePatternMemoryState(p);
+    }, 15_000);
+    return () => {
+      clearInterval(id);
+      const p = patternPersistRef.current;
+      if (p?.sessionStarted && !p.didFinish) savePatternMemoryState(p);
+    };
+  }, []);
 
   const finishSession = useCallback(
     async (reason: PatternMemoryFinishReason) => {
@@ -328,6 +334,8 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       });
       const performance = computePerformanceFromScore(score, difficulty);
       const won = reason !== 'failed';
+      if (won) void playVictoryFeedback();
+      else void playDefeatFeedback();
 
       await trackPatternMemoryResult({
         gameId: 'patternmemory',
@@ -465,6 +473,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
       setTotalTaps((prev) => prev + 1);
       if (correctTap) {
+        void playSuccessFeedback();
         setCorrectTaps((prev) => prev + 1);
         if (reactionDelta > 0) {
           setReactionAccumMs((prev) => prev + reactionDelta);
@@ -500,6 +509,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         return;
       }
 
+      void playErrorFeedback();
       setMistakes((prev) => prev + 1);
       finishSession('failed');
     },
@@ -657,7 +667,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Ver ranking"
+                title="Ver ranking local"
                 variant="secondary"
                 onPress={() => {
                   setResultVisible(false);

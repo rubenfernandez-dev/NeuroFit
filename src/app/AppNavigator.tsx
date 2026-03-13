@@ -56,7 +56,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'NeuroFit' }} />
         <Stack.Screen name="Games" component={GamesScreen} options={{ title: 'Juegos' }} />
         <Stack.Screen name="DailyChallenge" component={DailyChallengeScreen} options={{ title: 'Reto diario' }} />
-        <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ title: 'Ranking semanal' }} />
+        <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ title: 'Ranking local semanal' }} />
         <Stack.Screen name="Progress" component={ProgressScreen} options={{ title: 'Progreso' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Ajustes' }} />
         <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: 'Sudoku' }} />

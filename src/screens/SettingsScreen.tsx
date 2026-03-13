@@ -19,16 +19,38 @@ import {
 } from '../shared/notifications/notifications';
 import { STORAGE_KEYS } from '../shared/storage/keys';
 import { deleteItem } from '../shared/storage/secureStore';
+import {
+  getFeedbackPrefs,
+  updateFeedbackPrefs,
+  type FeedbackPrefs,
+} from '../shared/storage/feedback';
+import { updateGameFeedbackPreferences } from '../shared/feedback/gameFeedback';
+import { captureException, logWarning } from '../shared/observability';
 
 const options: ThemePreference[] = ['system', 'light', 'dark'];
 
 export default function SettingsScreen() {
   const { theme, preference, setPreference } = useAppTheme();
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [feedbackPrefs, setFeedbackPrefs] = useState<FeedbackPrefs | null>(null);
   const [permissionsDenied, setPermissionsDenied] = useState(false);
 
   useEffect(() => {
-    getNotificationPrefs().then(setPrefs);
+    const hydrateSettings = async () => {
+      try {
+        const [notificationPrefs, nextFeedbackPrefs] = await Promise.all([
+          getNotificationPrefs(),
+          getFeedbackPrefs(),
+        ]);
+        setPrefs(notificationPrefs);
+        setFeedbackPrefs(nextFeedbackPrefs);
+        updateGameFeedbackPreferences(nextFeedbackPrefs);
+      } catch (error) {
+        captureException(error, { area: 'settings.hydration' });
+      }
+    };
+
+    hydrateSettings();
   }, []);
 
   const displayTime = useMemo(() => {
@@ -111,12 +133,15 @@ export default function SettingsScreen() {
         await Linking.openSettings();
         return;
       }
-    } catch {
+    } catch (error) {
+      logWarning('settings.open_settings_failed', { strategy: 'Linking.openSettings' });
+      captureException(error, { area: 'settings.openSystemSettings', strategy: 'openSettings' });
     }
 
     try {
       await Linking.openURL('app-settings:');
-    } catch {
+    } catch (error) {
+      captureException(error, { area: 'settings.openSystemSettings', strategy: 'app-settings-url' });
       Alert.alert('No se pudo abrir ajustes', 'Abre Ajustes del sistema manualmente para activar notificaciones.');
     }
   };
@@ -139,6 +164,7 @@ export default function SettingsScreen() {
       resetStats(),
       resetProfile(),
       resetDaily(),
+      deleteItem(STORAGE_KEYS.feedback),
       deleteItem(STORAGE_KEYS.sudokuState),
       deleteItem(STORAGE_KEYS.memoryState),
       deleteItem(STORAGE_KEYS.mentalMathState),
@@ -147,6 +173,14 @@ export default function SettingsScreen() {
       deleteItem(STORAGE_KEYS.leaderboard),
     ]);
   };
+
+  const toggleFeedback = async (partial: Partial<FeedbackPrefs>) => {
+    const next = await updateFeedbackPrefs(partial);
+    setFeedbackPrefs(next);
+    updateGameFeedbackPreferences(next);
+  };
+
+  const masterFeedbackEnabled = feedbackPrefs?.enabled ?? true;
 
   return (
     <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
@@ -196,6 +230,65 @@ export default function SettingsScreen() {
             <Button title="Min +5" variant="secondary" onPress={() => updateTime('minute', 5)} style={{ flex: 1 }} />
           </View>
         </View>
+      </Card>
+
+      <Card>
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Feedback de juego</Text>
+
+        <View style={{ marginTop: 10, gap: 10 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Feedback global</Text>
+            <Switch
+              value={masterFeedbackEnabled}
+              onValueChange={(value) => {
+                toggleFeedback({ enabled: value });
+              }}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
+              thumbColor={masterFeedbackEnabled ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Sonidos de juego</Text>
+            <Switch
+              value={feedbackPrefs?.soundEnabled ?? true}
+              onValueChange={(value) => {
+                toggleFeedback({ soundEnabled: value });
+              }}
+              disabled={!masterFeedbackEnabled}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
+              thumbColor={feedbackPrefs?.soundEnabled ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Vibración / háptica</Text>
+            <Switch
+              value={feedbackPrefs?.hapticsEnabled ?? true}
+              onValueChange={(value) => {
+                toggleFeedback({ hapticsEnabled: value });
+              }}
+              disabled={!masterFeedbackEnabled}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
+              thumbColor={feedbackPrefs?.hapticsEnabled ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </View>
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Celebración visual</Text>
+            <Switch
+              value={feedbackPrefs?.celebrationEnabled ?? true}
+              onValueChange={(value) => {
+                toggleFeedback({ celebrationEnabled: value });
+              }}
+              disabled={!masterFeedbackEnabled}
+              trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
+              thumbColor={feedbackPrefs?.celebrationEnabled ? theme.colors.primary : theme.colors.textMuted}
+            />
+          </View>
+        </View>
+
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 8 }]}>Estos ajustes aplican automáticamente a todos los juegos.</Text>
       </Card>
 
       <Button title="Reset progreso" onPress={confirmReset} variant="ghost" />

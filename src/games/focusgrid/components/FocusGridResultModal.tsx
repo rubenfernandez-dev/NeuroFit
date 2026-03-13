@@ -63,7 +63,7 @@ export default function FocusGridResultModal({
 
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
             <Button title="Jugar de nuevo" onPress={onRestart} style={{ flex: 1 }} />
-            <Button title="Ver ranking" variant="secondary" onPress={onViewLeaderboard} style={{ flex: 1 }} />
+            <Button title="Ver ranking local" variant="secondary" onPress={onViewLeaderboard} style={{ flex: 1 }} />
           </View>
         </Card>
       </View>

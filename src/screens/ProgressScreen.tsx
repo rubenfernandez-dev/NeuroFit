@@ -12,6 +12,8 @@ import Screen from '../shared/ui/Screen';
 import ProgressBar from '../shared/ui/ProgressBar';
 import Pill from '../shared/ui/Pill';
 import { isIsoTimestampOnLocalDay } from '../shared/utils/time';
+import Button from '../shared/ui/Button';
+import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 
 type Snapshot = {
   xpTotal: number;
@@ -33,6 +35,7 @@ type Snapshot = {
 
 export default function ProgressScreen() {
   const { theme } = useAppTheme();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot>({
     xpTotal: 0,
     seasonId: '',
@@ -51,19 +54,26 @@ export default function ProgressScreen() {
   });
 
   const reload = useCallback(async () => {
-    const [profile, stats] = await Promise.all([ensureSeasonCurrent(), getAllStats()]);
-    const sessionsTotal = Object.values(stats).reduce((acc, game) => acc + (game?.sessions ?? 0), 0);
-    setSnapshot({
-      xpTotal: profile.xpTotal,
-      seasonId: profile.seasonId,
-      seasonPoints: profile.seasonPoints,
-      leagueId: profile.leagueId,
-      sessionsTotal,
-      streakCurrent: profile.streakCurrent,
-      streakBest: profile.streakBest,
-      neuro: profile.neuro,
-      stats,
-    });
+    try {
+      const [profile, stats] = await Promise.all([ensureSeasonCurrent(), getAllStats()]);
+      const sessionsTotal = Object.values(stats).reduce((acc, game) => acc + (game?.sessions ?? 0), 0);
+      setSnapshot({
+        xpTotal: profile.xpTotal,
+        seasonId: profile.seasonId,
+        seasonPoints: profile.seasonPoints,
+        leagueId: profile.leagueId,
+        sessionsTotal,
+        streakCurrent: profile.streakCurrent,
+        streakBest: profile.streakBest,
+        neuro: profile.neuro,
+        stats,
+      });
+      setLoadError(null);
+    } catch (error) {
+      const kind = classifyDataFailure(error);
+      captureException(error, { area: 'progress.reload', kind });
+      setLoadError(formatLoadFailureMessage(kind));
+    }
   }, []);
 
   useFocusEffect(
@@ -112,6 +122,15 @@ export default function ProgressScreen() {
 
   return (
     <Screen>
+      {loadError ? (
+        <Card variant="warning">
+          <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>
+          <View style={{ marginTop: 10 }}>
+            <Button title="Reintentar" onPress={reload} variant="secondary" />
+          </View>
+        </Card>
+      ) : null}
+
       <Card variant="primary">
         <Text style={[theme.typography.h2, { color: theme.colors.text }]}>NeuroScore</Text>
         <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 4 }]}>Actualizado: {neuroUpdatedLabel}</Text>

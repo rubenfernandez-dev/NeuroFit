@@ -15,6 +15,7 @@ import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/da
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
+import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
@@ -143,6 +144,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
       });
 
       if (isDaily && completionResult.dailyCompletion) {
+        void playVictoryFeedback();
         await clearMemoryState();
         setSessionStarted(false);
         setFinishing(false);
@@ -155,6 +157,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
       await clearMemoryState();
       setSessionStarted(false);
+      void playVictoryFeedback();
       Alert.alert(
         '¡Memory completado!',
         `Score ${score} · +${completionResult.earnedXp} XP · +${completionResult.earnedSp} SP`,
@@ -176,9 +179,11 @@ export default function MemoryScreen({ route, navigation }: Props) {
       const match = cards[a].pairId === cards[b].pairId;
 
       if (match) {
+        void playSuccessFeedback();
         setMatched((prev) => [...prev, a, b]);
         setFlipped([]);
       } else {
+        void playErrorFeedback();
         setLockInput(true);
         setTimeout(() => {
           setFlipped([]);

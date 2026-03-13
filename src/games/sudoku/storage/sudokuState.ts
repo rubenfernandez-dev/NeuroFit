@@ -2,6 +2,7 @@ import { STORAGE_KEYS } from '../../../shared/storage/keys';
 import { SudokuPersistedState, SudokuState } from '../model/types';
 import { normalizeDifficulty } from '../../types';
 import { deleteItem, getItem, setItem } from '../../../shared/storage/secureStore';
+import { captureException, logWarning } from '../../../shared/observability';
 
 function toRows(flat: number[]): number[][] {
   return Array.from({ length: 9 }, (_, row) => flat.slice(row * 9, row * 9 + 9));
@@ -138,7 +139,10 @@ export async function getSudokuState(): Promise<SudokuPersistedState | null> {
   if (!raw) return null;
   try {
     return normalizePersistedState(JSON.parse(raw));
-  } catch {
+  } catch (error) {
+    logWarning('storage.sudoku_state.corrupt_or_invalid', { storageKey: STORAGE_KEYS.sudokuState });
+    captureException(error, { area: 'storage.sudoku.getSudokuState', category: 'corrupt_data' });
+    await deleteItem(STORAGE_KEYS.sudokuState);
     return null;
   }
 }

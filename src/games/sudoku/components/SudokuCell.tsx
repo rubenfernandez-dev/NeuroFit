@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useAppTheme } from '../../../shared/theme/theme';
+import { getCellBackgroundColor } from './highlight';
 
 type SudokuCellProps = {
   size: number;
@@ -35,17 +36,16 @@ export default function SudokuCell({
   const noteFontSize = Math.max(6, Math.floor(size * 0.18));
   const noteLineHeight = Math.max(8, Math.floor(size * 0.24));
   const notesBoxSize = Math.max(18, Math.floor(size * 0.82));
-  const backgroundColor = error
-    ? theme.colors.danger
-    : selected
-      ? theme.colors.primarySoft
-      : valueMatchHighlight
-        ? theme.colors.primarySoft
-        : inBoxHighlight
-          ? theme.colors.card
-          : inLineHighlight
-            ? theme.colors.primarySoft
-            : theme.colors.surface;
+  const backgroundColor = getCellBackgroundColor(
+    theme,
+    {
+      selected,
+      rowOrCol: inLineHighlight,
+      box: inBoxHighlight,
+      valueMatch: valueMatchHighlight,
+    },
+    error,
+  );
 
   return (
     <Pressable

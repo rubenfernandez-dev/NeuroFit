@@ -70,10 +70,13 @@ export default function LeaderboardScreen() {
           {spToTop10 > 0 ? `Te faltan ${spToTop10} SP para Top 10` : '¡Ya estás en zona de ascenso!'}
         </Text>
         <Text style={{ color: theme.colors.muted, marginTop: 6 }}>Temporada: {seasonId} (reinicio los lunes)</Text>
+        <Text style={{ color: theme.colors.muted, marginTop: 6 }}>
+          Ranking local simulado en este dispositivo (sin backend global).
+        </Text>
       </Card>
 
       <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text, marginBottom: 10 }]}>Ranking semanal</Text>
+        <Text style={[theme.typography.h3, { color: theme.colors.text, marginBottom: 10 }]}>Ranking local semanal</Text>
 
         <View style={{ marginBottom: 8 }}>
           <Text style={[theme.typography.caption, { color: theme.colors.green, marginBottom: 6 }]}>Zona de ascenso (Top 10)</Text>

@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   stats: 'neurofit.stats',
   daily: 'neurofit.daily',
   notifications: 'neurofit.notifications',
+  feedback: 'neurofit.feedback',
   sudokuState: 'neurofit.sudoku.state',
   memoryState: 'neurofit.memory.state',
   mentalMathState: 'neurofit.mentalmath.state',

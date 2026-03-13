@@ -2,6 +2,7 @@ import { GameId, Difficulty } from '../../games/types';
 import { STORAGE_KEYS } from './keys';
 import { nowISO } from '../utils/time';
 import { deleteItem, getItem, setItem } from './secureStore';
+import { captureException, logWarning } from '../observability';
 
 export type GameStats = {
   sessions: number;
@@ -126,7 +127,10 @@ export async function getAllStats(): Promise<StatsStore> {
     }
 
     return normalized;
-  } catch {
+  } catch (error) {
+    logWarning('storage.stats.corrupt_or_invalid', { storageKey: STORAGE_KEYS.stats });
+    captureException(error, { area: 'storage.stats.getAllStats', category: 'corrupt_data' });
+    await deleteItem(STORAGE_KEYS.stats);
     return {};
   }
 }

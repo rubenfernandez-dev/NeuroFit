@@ -19,6 +19,7 @@ import FocusGridBoard from './components/FocusGridBoard';
 import FocusGridResultModal from './components/FocusGridResultModal';
 import { useTapFeedback } from './hooks/useTapFeedback';
 import { buildFocusGridSessionResult, getSessionSeed } from './session';
+import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FocusGrid'>;
 
@@ -168,42 +169,51 @@ export default function FocusGridScreen({ route, navigation }: Props) {
     return () => clearInterval(timer);
   }, [dailyBlockedReason, didFinish, phase, sessionStarted]);
 
+  // Ref keeps the full save payload current on every render.
+  const focusPersistRef = useRef<Parameters<typeof saveFocusGridState>[0] | null>(null);
+  focusPersistRef.current = sessionStarted && numbers.length > 0
+    ? {
+        startedAtISO,
+        numbers,
+        nextExpected,
+        mistakes,
+        correctTaps,
+        totalTaps,
+        timeLeft,
+        sessionSeed,
+        started: sessionStarted,
+        didFinish,
+        phase,
+        difficulty,
+        isDaily,
+        dailyDateISO,
+        seed: dailySeed,
+      }
+    : null;
+
+  // Persist on meaningful progress: next expected number (tap advance), mistakes,
+  // phase transitions, and session init.
+  // timeLeft, correctTaps, totalTaps are excluded — timeLeft ticks every second;
+  // correctTaps/totalTaps are derivable on restore (correctTaps = nextExpected − 1,
+  // totalTaps = correctTaps + mistakes). All are still captured via the ref.
   useEffect(() => {
-    if (!sessionStarted || numbers.length === 0) return;
-    saveFocusGridState({
-      startedAtISO,
-      numbers,
-      nextExpected,
-      mistakes,
-      correctTaps,
-      totalTaps,
-      timeLeft,
-      sessionSeed,
-      started: sessionStarted,
-      didFinish,
-      phase,
-      difficulty,
-      isDaily,
-      dailyDateISO,
-      seed: dailySeed,
-    });
-  }, [
-    correctTaps,
-    dailyDateISO,
-    dailySeed,
-    didFinish,
-    difficulty,
-    isDaily,
-    mistakes,
-    nextExpected,
-    numbers,
-    phase,
-    sessionSeed,
-    sessionStarted,
-    startedAtISO,
-    timeLeft,
-    totalTaps,
-  ]);
+    const p = focusPersistRef.current;
+    if (!p) return;
+    saveFocusGridState(p);
+  }, [nextExpected, mistakes, phase, numbers, sessionSeed, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed, startedAtISO]);
+
+  // Checkpoint every 30 s + save on unmount (handles back-navigation mid-game).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = focusPersistRef.current;
+      if (p?.started && !p.didFinish) saveFocusGridState(p);
+    }, 30_000);
+    return () => {
+      clearInterval(id);
+      const p = focusPersistRef.current;
+      if (p?.started && !p.didFinish) saveFocusGridState(p);
+    };
+  }, []);
 
   const finishSession = useCallback(
     async (reason: FocusGridFinishReason) => {
@@ -266,6 +276,9 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         earnedXp: completionResult.earnedXp,
         earnedSp: completionResult.earnedSp,
       });
+
+      if (sessionResult.completed) void playVictoryFeedback();
+      else void playDefeatFeedback();
 
       if (isDaily && completionResult.dailyCompletion) {
         await clearFocusGridState();
@@ -337,6 +350,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
       setTotalTaps((prev) => prev + 1);
       if (value === nextExpected) {
+        void playSuccessFeedback();
         setCorrectTaps((prev) => prev + 1);
         applyTapFeedback({ type: 'correct', value });
 
@@ -350,6 +364,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       }
 
       setMistakes((prev) => prev + 1);
+      void playErrorFeedback();
       applyTapFeedback({ type: 'incorrect', value });
     },
     [applyTapFeedback, dailyBlockedReason, didFinish, finishSession, finishing, nextExpected, phase, totalCells],

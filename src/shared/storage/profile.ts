@@ -5,6 +5,7 @@ import { deleteItem, getItem, setItem } from './secureStore';
 import { currentSeasonId, getLeagueRank, getNextLeague, getPrevLeague, LeagueId } from '../gamification/leagues';
 import { getUserRankInWeeklyLeaderboard } from '../leaderboard/leaderboard';
 import { Difficulty, GameId, normalizeDifficulty } from '../../games/types';
+import { captureException, logWarning } from '../observability';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
 
@@ -112,7 +113,10 @@ export async function getProfile(): Promise<Profile> {
     }
 
     return normalized;
-  } catch {
+  } catch (error) {
+    logWarning('storage.profile.corrupt_or_invalid', { storageKey: STORAGE_KEYS.profile });
+    captureException(error, { area: 'storage.profile.getProfile', category: 'corrupt_data' });
+    await deleteItem(STORAGE_KEYS.profile);
     return defaultProfile;
   }
 }

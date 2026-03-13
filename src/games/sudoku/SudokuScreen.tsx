@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
@@ -19,6 +19,7 @@ import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
+import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -183,27 +184,35 @@ export default function SudokuScreen({ route, navigation }: Props) {
     return () => clearTimeout(timeout);
   }, [lastErrorCell]);
 
+  // Ref keeps the full save payload current on every render — the unmount cleanup
+  // and the periodic checkpoint always write the latest state (including elapsedMs).
+  const sudokuPersistRef = useRef<Parameters<typeof saveSudokuState>[0] | null>(null);
+  sudokuPersistRef.current =
+    grid.length === 9 && puzzle.length === 81 && solution.length === 81
+      ? { grid, givens, notes, noteMode, history, puzzle, solution, difficulty, elapsedMs, isDaily, dailyDateISO, mistakes, gameOver, lastErrorCell, didWin, sessionStarted }
+      : null;
+
+  // Persist on user interactions (cell fill, notes, clear, game events).
+  // elapsedMs is read from the ref — not in the dep array — so the 1 s timer tick
+  // no longer triggers a write on its own.
   useEffect(() => {
-    if (grid.length !== 9 || puzzle.length !== 81 || solution.length !== 81) return;
-    saveSudokuState({
-      grid,
-      givens,
-      notes,
-      noteMode,
-      history,
-      puzzle,
-      solution,
-      difficulty,
-      elapsedMs,
-      isDaily,
-      dailyDateISO,
-      mistakes,
-      gameOver,
-      lastErrorCell,
-      didWin,
-      sessionStarted,
-    });
-  }, [grid, givens, notes, noteMode, history, puzzle, solution, difficulty, elapsedMs, isDaily, dailyDateISO, mistakes, gameOver, lastErrorCell, didWin, sessionStarted]);
+    const p = sudokuPersistRef.current;
+    if (!p) return;
+    saveSudokuState(p);
+  }, [grid, givens, notes, noteMode, history, puzzle, solution, difficulty, isDaily, dailyDateISO, mistakes, gameOver, lastErrorCell, didWin, sessionStarted]);
+
+  // Checkpoint every 30 s + save on unmount (handles back-navigation mid-game).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = sudokuPersistRef.current;
+      if (p?.sessionStarted && !p.didWin && !p.gameOver) saveSudokuState(p);
+    }, 30_000);
+    return () => {
+      clearInterval(id);
+      const p = sudokuPersistRef.current;
+      if (p?.sessionStarted && !p.didWin && !p.gameOver) saveSudokuState(p);
+    };
+  }, []);
 
   const conflicts = useMemo(() => (showErrors ? findConflicts(flattenGrid(grid)) : new Set<number>()), [grid, showErrors]);
   const canClear =
@@ -243,6 +252,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
     });
 
     if (isDaily && completionResult.dailyCompletion) {
+      void playVictoryFeedback();
       await clearSudokuState();
       setSessionStarted(false);
       setFinishing(false);
@@ -255,6 +265,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
 
     await clearSudokuState();
     setSessionStarted(false);
+    void playVictoryFeedback();
     setVictorySummary({
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
@@ -289,10 +300,10 @@ export default function SudokuScreen({ route, navigation }: Props) {
       return;
     }
 
-    const prevValue = grid[selectedRow][selectedCol];
-    const prevNotes = [...notes[selectedRow][selectedCol]];
+    const currentValue = grid[selectedRow][selectedCol];
+    const currentNotes = notes[selectedRow][selectedCol];
 
-    if (prevValue === value && prevNotes.length === 0) return;
+    if (currentValue === value && currentNotes.length === 0) return;
 
     const nextGrid = cloneGrid(grid);
     nextGrid[selectedRow][selectedCol] = value;
@@ -313,21 +324,16 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setGameOver(nextGameOver);
     setLastErrorCell(nextErrorCell);
     setShowErrors(false);
-    setHistory((prev) => [
-      ...prev,
-      {
-        row: selectedRow,
-        col: selectedCol,
-        prevValue,
-        nextValue: value,
-        prevNotes,
-        mistakesDelta,
-        prevGameOver: gameOver,
-        prevErrorCell: lastErrorCell,
-      },
-    ]);
+
+    if (value !== 0 && !wrongInput) {
+      void playSuccessFeedback();
+    }
+    if (wrongInput) {
+      void playErrorFeedback();
+    }
 
     if (nextGameOver) {
+      void playDefeatFeedback();
       await trackGameOver({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal', difficulty, durationMs: elapsedMs, mistakes: nextMistakes });
       await updateNeuroAfterGame({
         gameId: 'sudoku',
@@ -346,27 +352,6 @@ export default function SudokuScreen({ route, navigation }: Props) {
     await completeIfSolved(nextGrid);
   };
 
-  const undoLastMove = () => {
-    if (dailyBlockedReason) return;
-    if (history.length === 0 || didWin) return;
-
-    const last = history[history.length - 1];
-    const nextGrid = cloneGrid(grid);
-    nextGrid[last.row][last.col] = last.prevValue;
-
-    const nextNotes = cloneNotes(notes);
-    nextNotes[last.row][last.col] = [...last.prevNotes].sort((a, b) => a - b);
-
-    setGrid(nextGrid);
-    setNotes(nextNotes);
-    setMistakes((prev) => Math.max(0, prev - Math.max(0, last.mistakesDelta ?? 0)));
-    setGameOver(last.prevGameOver ?? false);
-    setLastErrorCell(last.prevErrorCell ?? null);
-    setDidWin(false);
-    setShowErrors(false);
-    setHistory((prev) => prev.slice(0, -1));
-  };
-
   const clearCell = async () => {
     if (dailyBlockedReason) return;
     if (givens[selectedRow]?.[selectedCol] || gameOver || didWin) return;
@@ -374,22 +359,8 @@ export default function SudokuScreen({ route, navigation }: Props) {
     if (noteMode) {
       if (notes[selectedRow][selectedCol].length === 0) return;
       const nextNotes = cloneNotes(notes);
-      const prevNotes = [...notes[selectedRow][selectedCol]];
       nextNotes[selectedRow][selectedCol] = [];
       setNotes(nextNotes);
-      setHistory((prev) => [
-        ...prev,
-        {
-          row: selectedRow,
-          col: selectedCol,
-          prevValue: grid[selectedRow][selectedCol],
-          nextValue: grid[selectedRow][selectedCol],
-          prevNotes,
-          mistakesDelta: 0,
-          prevGameOver: gameOver,
-          prevErrorCell: lastErrorCell,
-        },
-      ]);
       return;
     }
 
@@ -511,7 +482,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
 
         {!dailyBlockedReason ? (
         <View onLayout={(event) => setControlsHeight(event.nativeEvent.layout.height)}>
-          <Card style={{ padding: compactLayout ? 10 : 14 }}>
+          <Card style={{ padding: compactLayout ? 8 : 12 }}>
             <Keypad
               onInput={setNumber}
               onClear={clearCell}
@@ -519,7 +490,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
               clearDisabled={!canClear}
               compact={compactLayout}
               buttonSize={keypadButtonSize}
-              gap={controlsGap}
+              gap={compactLayout ? 4 : 6}
               showClear={false}
             />
 
@@ -529,14 +500,22 @@ export default function SudokuScreen({ route, navigation }: Props) {
               variant={noteMode ? 'primary' : 'secondary'}
               onPress={() => setNoteMode((prev) => !prev)}
               disabled={gameOver || didWin}
-              style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }}
+              style={{ flex: 1, minHeight: compactLayout ? 38 : 44, paddingVertical: compactLayout ? 6 : 8, paddingHorizontal: 8 }}
             />
-            <Button title="↩ Undo" variant="ghost" onPress={undoLastMove} disabled={history.length === 0 || didWin} style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }} />
-          </View>
-
-          <View style={{ flexDirection: 'row', gap: controlsGap, marginTop: controlsGap }}>
-            <Button title="Borrar" variant="secondary" onPress={clearCell} disabled={gameOver || didWin || !canClear} style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }} />
-            <Button title="Comprobar" variant="secondary" onPress={checkBoard} disabled={grid.length !== 9 || finishing || didWin} style={{ flex: 1, minHeight: compactLayout ? 40 : 48, paddingVertical: compactLayout ? 6 : 10, paddingHorizontal: 10 }} />
+            <Button
+              title="Borrar"
+              variant="secondary"
+              onPress={clearCell}
+              disabled={gameOver || didWin || !canClear}
+              style={{ flex: 1, minHeight: compactLayout ? 38 : 44, paddingVertical: compactLayout ? 6 : 8, paddingHorizontal: 8 }}
+            />
+            <Button
+              title="Comprobar"
+              variant="secondary"
+              onPress={checkBoard}
+              disabled={grid.length !== 9 || finishing || didWin}
+              style={{ flex: 1, minHeight: compactLayout ? 38 : 44, paddingVertical: compactLayout ? 6 : 8, paddingHorizontal: 8 }}
+            />
           </View>
           </Card>
         </View>
@@ -546,7 +525,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
           title={isDaily ? 'Reintentar etapa' : 'Nuevo'}
           onPress={handleNew}
           disabled={(isDaily && !gameOver) || !!dailyBlockedReason}
-          style={{ minHeight: compactLayout ? 40 : 46 }}
+          style={{ minHeight: compactLayout ? 40 : 46, marginBottom: theme.spacing.sm }}
         />
       </Screen>
 
@@ -580,7 +559,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Ver ranking"
+                title="Ver ranking local"
                 variant="secondary"
                 onPress={() => {
                   setVictoryVisible(false);

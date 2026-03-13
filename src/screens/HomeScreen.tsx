@@ -15,11 +15,14 @@ import PrimaryButton from '../shared/ui/PrimaryButton';
 import ProgressBar from '../shared/ui/ProgressBar';
 import { ensureDailyToday, getDailyProgress } from '../shared/storage/daily';
 import { generateWeeklyLeaderboard } from '../shared/leaderboard/leaderboard';
+import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export default function HomeScreen({ navigation }: Props) {
   const { theme } = useAppTheme();
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [xpTotal, setXpTotal] = useState(0);
   const [seasonPoints, setSeasonPoints] = useState(0);
   const [leagueId, setLeagueId] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'grand_master' | 'legend'>('bronze');
@@ -35,17 +38,20 @@ export default function HomeScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      ensureSeasonCurrent().then((profile) => {
-        Promise.all([
-          ensureDailyToday(),
-          generateWeeklyLeaderboard({
-            seasonId: profile.seasonId,
-            leagueId: profile.leagueId,
-            userSeasonPoints: profile.seasonPoints,
-            userName: 'Tú',
-            size: 50,
-          }),
-        ]).then(([daily, board]) => {
+      const load = async () => {
+        try {
+          const profile = await ensureSeasonCurrent();
+          const [daily, board] = await Promise.all([
+            ensureDailyToday(),
+            generateWeeklyLeaderboard({
+              seasonId: profile.seasonId,
+              leagueId: profile.leagueId,
+              userSeasonPoints: profile.seasonPoints,
+              userName: 'Tú',
+              size: 50,
+            }),
+          ]);
+
           const progress = getDailyProgress(daily);
           const me = board.find((entry) => entry.isUser);
           const top10Cut = board.find((entry) => entry.rank === 10)?.seasonPoints ?? profile.seasonPoints;
@@ -57,22 +63,30 @@ export default function HomeScreen({ navigation }: Props) {
           setSpToTop10(Math.max(0, top10Cut - profile.seasonPoints + 1));
           setSpToSafety(Math.max(0, safetyCut - profile.seasonPoints + 1));
           setNeuroScore(profile.neuro);
-        });
 
-        setXpTotal(profile.xpTotal);
-        setSeasonPoints(profile.seasonPoints);
-        setLeagueId(profile.leagueId);
-        setStreakCurrent(profile.streakCurrent);
-        setStreakBest(profile.streakBest);
+          setXpTotal(profile.xpTotal);
+          setSeasonPoints(profile.seasonPoints);
+          setLeagueId(profile.leagueId);
+          setStreakCurrent(profile.streakCurrent);
+          setStreakBest(profile.streakBest);
 
-        if (
-          profile.lastWeekResult &&
-          profile.lastWeekResultShownSeasonId !== profile.lastWeekResult.seasonIdPrev
-        ) {
-          setWeeklyResult(profile.lastWeekResult);
+          if (
+            profile.lastWeekResult &&
+            profile.lastWeekResultShownSeasonId !== profile.lastWeekResult.seasonIdPrev
+          ) {
+            setWeeklyResult(profile.lastWeekResult);
+          }
+
+          setLoadError(null);
+        } catch (error) {
+          const kind = classifyDataFailure(error);
+          captureException(error, { area: 'home.load', kind });
+          setLoadError(formatLoadFailureMessage(kind));
         }
-      });
-    }, []),
+      };
+
+      load();
+    }, [reloadNonce]),
   );
 
   const level = getLevelByXp(xpTotal);
@@ -110,6 +124,14 @@ export default function HomeScreen({ navigation }: Props) {
       <Screen>
         <Text style={[theme.typography.title, { color: theme.colors.text }]}>NeuroFit</Text>
         <Text style={[theme.typography.body, { color: theme.colors.muted }]}>Entrena tu mente</Text>
+        {loadError ? (
+          <Card variant="warning">
+            <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>
+            <View style={{ marginTop: 10 }}>
+              <Button title="Reintentar carga" onPress={() => setReloadNonce((current) => current + 1)} variant="secondary" />
+            </View>
+          </Card>
+        ) : null}
         <Pill label={`🔥 Racha ${streakCurrent} · Mejor ${streakBest}`} tone="warning" />
 
         <Card variant="primary">
@@ -169,7 +191,7 @@ export default function HomeScreen({ navigation }: Props) {
           <Pressable onPress={() => navigation.navigate('Leaderboard')} style={{ flex: 1 }}>
             <Card>
               <Text style={{ fontSize: 20 }}>🥇</Text>
-              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Ranking</Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Ranking local</Text>
             </Card>
           </Pressable>
           <Pressable onPress={() => navigation.navigate('Progress')} style={{ flex: 1 }}>

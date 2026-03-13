@@ -169,6 +169,73 @@ Claves de persistencia activas:
 - Estados de sesión por juego: sudoku, memory, mentalmath, speedmatch, patternmemory, focusgrid.
 - Preferencias de notificaciones y programación local de recordatorio.
 
+## Observabilidad Y Errores
+
+Estado actual implementado:
+
+- Logging operativo estructurado en `src/shared/observability/observability.ts`.
+- API compartida: `logWarning`, `logError`, `captureException`, `initCrashReporting`.
+- Recuperación defensiva en storage crítico (`profile`, `stats`, `daily`, `notifications`, `feedback`) cuando hay datos corruptos.
+- Fallback UX para cargas críticas en bootstrap y pantallas Home/Progress.
+
+### Sentry (Expo) - Setup Manual
+
+La integración quedó preparada, pero requiere variables de entorno para activarse.
+
+1. Instalar dependencias del proyecto (`npm install`).
+2. Configurar variable pública en entorno local/CI:
+
+```bash
+EXPO_PUBLIC_SENTRY_DSN=tu_dsn_de_sentry
+EXPO_PUBLIC_APP_ENV=production
+```
+
+3. Reiniciar Metro o el build después de cambiar variables.
+
+Comportamiento sin DSN:
+
+- La app no falla.
+- Sentry queda desactivado y se registra advertencia estructurada en logs.
+
+## Publicacion Y Store Readiness
+
+Base actual para publicacion:
+
+- App local-first sin backend de cuentas.
+- Ranking semanal local/simulado (no global en tiempo real).
+- Persistencia local de progreso y ajustes.
+- Notificaciones solo si el usuario las habilita.
+
+### Privacidad (baseline tecnica)
+
+Se incluyo una base honesta en `PRIVACY.md` con:
+
+- Datos que realmente maneja la app hoy.
+- Que no recopila el producto actual.
+- Rol opcional de Sentry y decision pendiente de activarlo en produccion.
+- Pendientes humanos para Play Console y politica legal final.
+
+Checklist de publicacion operativa: `PLAYSTORE_CHECKLIST.md`.
+
+### Permisos Android
+
+Manifest fuente principal (`android/app/src/main/AndroidManifest.xml`):
+
+- `android.permission.INTERNET`
+- `android.permission.VIBRATE`
+
+En merge de release tambien aparecen permisos transitivos de librerias (por ejemplo notificaciones, secure storage y utilidades de runtime Android). Esos permisos deben revisarse contra el artefacto final antes de publicar.
+
+### Checklist Minimo Antes De Subir A Play Store
+
+1. Definir y publicar URL final de politica de privacidad (legal revisada).
+2. Confirmar decision de Sentry en produccion:
+  - si se activa, revisar scrubbing/retencion/accesos.
+3. Generar AAB release firmado y verificar manifest final de release.
+4. Completar Data Safety de Play Console con base en `PRIVACY.md` y artefacto final.
+5. Preparar ficha (titulo corto/largo, descripcion, screenshots, icon, feature graphic).
+6. Validar que el copy de tienda no prometa backend ni competicion global real.
+
 ## Zonas En Migración / Deuda Activa
 
 Estas áreas están vivas en el código y conviene conocerlas al entrar:

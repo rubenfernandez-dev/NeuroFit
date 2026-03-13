@@ -12,7 +12,8 @@
       "backgroundColor": "#0F172A"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,14 +21,21 @@
         "backgroundColor": "#0F172A"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.neurofit"
+      "package": "com.ruben.neurofit",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-secure-store",
-      "expo-asset"
+      "expo-asset",
+      "@sentry/react-native/expo"
     ]
   }
 }

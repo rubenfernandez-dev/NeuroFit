@@ -23,38 +23,29 @@ export default function Keypad({
   gap = 8,
   showClear = true,
 }: KeypadProps) {
-  const rows = compact
-    ? [
-        [1, 2, 3, 4, 5],
-        [6, 7, 8, 9],
-      ]
-    : [
-        [1, 2, 3],
-        [4, 5, 6],
-        [7, 8, 9],
-      ];
+  const values = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const targetHeight = Math.max(compact ? 34 : 40, buttonSize - 10);
 
   return (
     <View style={{ gap, flexShrink: 0 }}>
-      {rows.map((row, rowIndex) => (
-        <View key={rowIndex} style={{ flexDirection: 'row', gap, justifyContent: 'center' }}>
-          {row.map((value) => (
-            <Button
-              key={value}
-              title={String(value)}
-              onPress={() => onInput(value)}
-              disabled={disabled}
-              style={{
-                width: buttonSize,
-                minHeight: buttonSize,
-                borderRadius: 999,
-                paddingHorizontal: 0,
-                paddingVertical: 0,
-              }}
-            />
-          ))}
-        </View>
-      ))}
+      <View style={{ flexDirection: 'row', gap, justifyContent: 'space-between' }}>
+        {values.map((value) => (
+          <Button
+            key={value}
+            title={String(value)}
+            onPress={() => onInput(value)}
+            disabled={disabled}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              minHeight: targetHeight,
+              borderRadius: 12,
+              paddingHorizontal: 0,
+              paddingVertical: 0,
+            }}
+          />
+        ))}
+      </View>
 
       {showClear ? (
         <Button

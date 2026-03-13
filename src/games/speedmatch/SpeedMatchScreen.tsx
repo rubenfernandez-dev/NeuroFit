@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Modal, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
@@ -14,6 +14,7 @@ import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { clearSpeedMatchState, getSpeedMatchState, saveSpeedMatchState } from './storage/speedmatchState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
+import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
 
@@ -185,25 +186,48 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     return () => clearInterval(timer);
   }, [sessionStarted, didFinish, dailyBlockedReason]);
 
+  // Ref keeps the full save payload current on every render.
+  const speedPersistRef = useRef<Parameters<typeof saveSpeedMatchState>[0] | null>(null);
+  speedPersistRef.current = previousSymbol && currentSymbol
+    ? {
+        previousSymbol,
+        currentSymbol,
+        round,
+        correct,
+        mistakes,
+        score,
+        timeLeft,
+        sessionSeed,
+        sessionStarted,
+        didFinish,
+        difficulty,
+        isDaily,
+        dailyDateISO,
+        seed: dailySeed,
+      }
+    : null;
+
+  // Persist on each answered round (round / correct / mistakes / score / symbols change).
+  // timeLeft is excluded — it ticks every second and would otherwise cause 1 write/s.
+  // It is still captured via the ref when an answer triggers a save.
   useEffect(() => {
-    if (!previousSymbol || !currentSymbol) return;
-    saveSpeedMatchState({
-      previousSymbol,
-      currentSymbol,
-      round,
-      correct,
-      mistakes,
-      score,
-      timeLeft,
-      sessionSeed,
-      sessionStarted,
-      didFinish,
-      difficulty,
-      isDaily,
-      dailyDateISO,
-      seed: dailySeed,
-    });
-  }, [previousSymbol, currentSymbol, round, correct, mistakes, score, timeLeft, sessionSeed, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed]);
+    const p = speedPersistRef.current;
+    if (!p) return;
+    saveSpeedMatchState(p);
+  }, [previousSymbol, currentSymbol, round, correct, mistakes, score, sessionSeed, sessionStarted, didFinish, difficulty, isDaily, dailyDateISO, dailySeed]);
+
+  // Checkpoint every 30 s + save on unmount (handles back-navigation mid-game).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = speedPersistRef.current;
+      if (p?.sessionStarted && !p.didFinish) saveSpeedMatchState(p);
+    }, 30_000);
+    return () => {
+      clearInterval(id);
+      const p = speedPersistRef.current;
+      if (p?.sessionStarted && !p.didFinish) saveSpeedMatchState(p);
+    };
+  }, []);
 
   const finishSession = async () => {
     if (finishing || didFinish) return;
@@ -239,6 +263,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     });
 
     if (isDaily && completionResult.dailyCompletion) {
+      void playVictoryFeedback();
       await clearSpeedMatchState();
       setSessionStarted(false);
       setFinishing(false);
@@ -251,6 +276,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
     await clearSpeedMatchState();
     setSessionStarted(false);
+    void playVictoryFeedback();
     setResultSummary({
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
@@ -275,6 +301,8 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
     const expectedMatch = previousSymbol === currentSymbol;
     const wasCorrect = isMatchChoice === expectedMatch;
+    if (wasCorrect) void playSuccessFeedback();
+    else void playErrorFeedback();
     const nextCorrect = wasCorrect ? correct + 1 : correct;
     const nextMistakes = wasCorrect ? mistakes : mistakes + 1;
     const nextScore = wasCorrect ? score + 10 : Math.max(0, score - 5);
@@ -387,7 +415,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
                 style={{ flex: 1 }}
               />
               <Button
-                title="Ver ranking"
+                title="Ver ranking local"
                 variant="secondary"
                 onPress={() => {
                   setResultVisible(false);

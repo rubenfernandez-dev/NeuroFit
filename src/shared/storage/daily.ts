@@ -8,6 +8,7 @@ import { getProfile, updateProfile } from './profile';
 import { applyDailyCompletionToStreak } from '../gamification/streak';
 import { nowISO } from '../utils/time';
 import { migrateLegacyUtcDailyToLocalDay } from './dailyDay';
+import { captureException, logWarning } from '../observability';
 
 type DailyStageGameId = 'mentalmath' | 'memory' | 'sudoku' | 'speedmatch' | 'patternmemory' | 'focusgrid';
 
@@ -193,7 +194,10 @@ export async function getDaily(): Promise<DailyState | null> {
     }
 
     return fromLegacyOrNull(parsed);
-  } catch {
+  } catch (error) {
+    logWarning('storage.daily.corrupt_or_invalid', { storageKey: STORAGE_KEYS.daily });
+    captureException(error, { area: 'storage.daily.getDaily', category: 'corrupt_data' });
+    await deleteItem(STORAGE_KEYS.daily);
     return null;
   }
 }

@@ -1,5 +1,6 @@
 import { STORAGE_KEYS } from './keys';
 import { deleteItem, getItem, setItem } from './secureStore';
+import { captureException, logWarning } from '../observability';
 
 export type NotificationPrefs = {
   enabled: boolean;
@@ -27,7 +28,10 @@ export async function getNotificationPrefs(): Promise<NotificationPrefs> {
       minute:
         typeof parsed.minute === 'number' ? Math.min(59, Math.max(0, Math.floor(parsed.minute))) : defaultPrefs.minute,
     };
-  } catch {
+  } catch (error) {
+    logWarning('storage.notifications.corrupt_or_invalid', { storageKey: STORAGE_KEYS.notifications });
+    captureException(error, { area: 'storage.notifications.getNotificationPrefs', category: 'corrupt_data' });
+    await deleteItem(STORAGE_KEYS.notifications);
     return defaultPrefs;
   }
 }

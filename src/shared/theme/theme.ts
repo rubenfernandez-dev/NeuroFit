@@ -5,6 +5,7 @@ import { spacing } from './spacing';
 import { typography } from './typography';
 import { shadow } from './shadow';
 import { getProfile, ThemePreference, updateProfile, Profile } from '../storage/profile';
+import { captureException } from '../observability';
 
 export type AppTheme = {
   mode: 'light' | 'dark';
@@ -34,7 +35,16 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [preference, setPreferenceState] = useState<ThemePreference>('system');
 
   useEffect(() => {
-    getProfile().then((profile: Profile) => setPreferenceState(profile.themePreference));
+    const hydrateThemePreference = async () => {
+      try {
+        const profile: Profile = await getProfile();
+        setPreferenceState(profile.themePreference);
+      } catch (error) {
+        captureException(error, { area: 'theme.hydration' });
+      }
+    };
+
+    hydrateThemePreference();
   }, []);
 
   const mode = resolveMode(preference, systemScheme);
