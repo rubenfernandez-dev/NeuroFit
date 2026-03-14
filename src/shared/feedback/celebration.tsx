@@ -70,6 +70,7 @@ export function CelebrationOverlay() {
     }));
 
     translateValuesRef.current = particlesRef.current.map(() => new Animated.Value(-18));
+    // Keep rotation progress normalized to avoid invalid interpolate input ranges.
     rotateValuesRef.current = particlesRef.current.map(() => new Animated.Value(0));
 
     opacity.setValue(1);
@@ -85,7 +86,7 @@ export function CelebrationOverlay() {
           useNativeDriver: true,
         }),
         Animated.timing(rotate, {
-          toValue: particle.rotateDeg,
+          toValue: 1,
           duration: event.durationMs,
           easing: Easing.linear,
           useNativeDriver: true,
@@ -119,9 +120,10 @@ export function CelebrationOverlay() {
       <Animated.View style={[StyleSheet.absoluteFill, { opacity }]}> 
         {particlesRef.current.map((particle, index) => {
           const translateY = translateValuesRef.current[index];
+          const endRotateDeg = Number.isFinite(particle.rotateDeg) ? particle.rotateDeg : 0;
           const rotate = rotateValuesRef.current[index]?.interpolate({
-            inputRange: [0, particle.rotateDeg],
-            outputRange: ['0deg', `${particle.rotateDeg}deg`],
+            inputRange: [0, 1],
+            outputRange: ['0deg', `${endRotateDeg}deg`],
           });
 
           return (
