@@ -11,14 +11,14 @@ const SOUND_ASSETS: Record<SoundKind, number> = {
 };
 
 const SOUND_VOLUME: Record<SoundKind, number> = {
-  victory: 0.78,
+  victory: 0.96,
   defeat: 0.4,
   error: 0.3,
   success: 0.2,
 };
 
 const SOUND_RATE: Record<SoundKind, number> = {
-  victory: 1.03,
+  victory: 1,
   defeat: 1,
   error: 1,
   success: 1,

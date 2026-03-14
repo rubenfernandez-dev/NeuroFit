@@ -51,14 +51,14 @@ export default function GameResultModal({
     Animated.parallel([
       Animated.timing(entrance, {
         toValue: 1,
-        duration: 280,
+        duration: 360,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.spring(entrance, {
         toValue: 1,
-        speed: 13,
-        bounciness: 7,
+        speed: 11,
+        bounciness: 9,
         useNativeDriver: true,
       }),
     ]).start();
@@ -66,12 +66,12 @@ export default function GameResultModal({
 
   const scale = entrance.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.92, 1],
+    outputRange: [0.86, 1],
   });
 
   const translateY = entrance.interpolate({
     inputRange: [0, 1],
-    outputRange: [18, 0],
+    outputRange: [28, 0],
   });
 
   const variantMeta = useMemo(() => {
@@ -80,6 +80,8 @@ export default function GameResultModal({
         icon: '🏆',
         accent: theme.colors.success,
         badgeText: 'Victoria',
+        haloOpacity: theme.mode === 'dark' ? 0.26 : 0.18,
+        panelBackground: theme.mode === 'dark' ? 'rgba(74,222,128,0.14)' : 'rgba(34,197,94,0.10)',
       };
     }
     if (variant === 'defeat') {
@@ -87,12 +89,16 @@ export default function GameResultModal({
         icon: '⚠️',
         accent: theme.colors.danger,
         badgeText: 'Resultado',
+        haloOpacity: theme.mode === 'dark' ? 0.18 : 0.12,
+        panelBackground: theme.mode === 'dark' ? 'rgba(248,113,113,0.10)' : 'rgba(239,68,68,0.08)',
       };
     }
     return {
       icon: '✨',
       accent: theme.colors.primary,
       badgeText: 'Resultado',
+      haloOpacity: theme.mode === 'dark' ? 0.14 : 0.1,
+      panelBackground: theme.mode === 'dark' ? 'rgba(129,140,248,0.12)' : 'rgba(79,70,229,0.08)',
     };
   }, [theme.colors.danger, theme.colors.primary, theme.colors.success, variant]);
 
@@ -117,33 +123,54 @@ export default function GameResultModal({
             transform: [{ translateY }, { scale }],
           }}
         >
+          <View
+            style={{
+              position: 'absolute',
+              top: 18,
+              right: 24,
+              left: 24,
+              bottom: -12,
+              borderRadius: 28,
+              backgroundColor: variantMeta.accent,
+              opacity: variantMeta.haloOpacity,
+              transform: [{ scale: 1.04 }],
+            }}
+          />
           <Card
             style={{
               borderColor: variantMeta.accent,
-              borderWidth: 1.5,
+              borderWidth: variant === 'victory' ? 2 : 1.5,
               shadowColor: variantMeta.accent,
-              shadowOpacity: theme.mode === 'dark' ? 0.28 : 0.2,
-              shadowRadius: 18,
-              shadowOffset: { width: 0, height: 8 },
-              elevation: 10,
+              shadowOpacity: theme.mode === 'dark' ? 0.34 : 0.24,
+              shadowRadius: 24,
+              shadowOffset: { width: 0, height: 10 },
+              elevation: 14,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Text style={{ fontSize: 24 }}>{variantMeta.icon}</Text>
-              <View
-                style={{
-                  borderRadius: 999,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
-                  backgroundColor: variantMeta.accent,
-                }}
-              >
-                <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 12 }}>{variantMeta.badgeText}</Text>
+            <View
+              style={{
+                borderRadius: 18,
+                padding: 14,
+                backgroundColor: variantMeta.panelBackground,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ fontSize: variant === 'victory' ? 30 : 24 }}>{variantMeta.icon}</Text>
+                <View
+                  style={{
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    backgroundColor: variantMeta.accent,
+                  }}
+                >
+                  <Text style={{ color: '#FFFFFF', fontWeight: '800', fontSize: 12 }}>{variantMeta.badgeText}</Text>
+                </View>
               </View>
-            </View>
 
-            <Text style={[theme.typography.h3, { color: theme.colors.text, marginTop: 10 }]}>{title}</Text>
-            {subtitle ? <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>{subtitle}</Text> : null}
+              <Text style={[theme.typography.h3, { color: theme.colors.text, marginTop: 10 }]}>{title}</Text>
+              {subtitle ? <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>{subtitle}</Text> : null}
+            </View>
 
             <View style={{ marginTop: 12 }}>
               {metrics.map((metric) => (

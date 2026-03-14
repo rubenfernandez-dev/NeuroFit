@@ -30,13 +30,33 @@ export function getGameFeedbackPreferences(): GameFeedbackPreferences {
   return { ...prefs };
 }
 
+function wait(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export async function playVictoryFeedback() {
   if (!prefs.enabled) return;
 
-  void stopFocusAmbient({ fadeOutMs: 500 });
-  if (prefs.soundEnabled) await playVictorySound();
-  if (prefs.hapticsEnabled) await triggerVictoryHaptic();
-  if (prefs.celebrationEnabled) triggerCelebration({ durationMs: 1800, particleCount: 34 });
+  if (prefs.celebrationEnabled) triggerCelebration({ durationMs: 2200, particleCount: 52 });
+  void stopFocusAmbient({ fadeOutMs: 180 });
+
+  const tasks: Array<Promise<unknown>> = [];
+  if (prefs.soundEnabled) {
+    tasks.push(
+      wait(90).then(() => playVictorySound()),
+    );
+  }
+  if (prefs.hapticsEnabled) {
+    tasks.push(
+      wait(40).then(() => triggerVictoryHaptic()),
+    );
+  }
+
+  if (tasks.length > 0) {
+    await Promise.allSettled(tasks);
+  }
 }
 
 export async function playDefeatFeedback() {
