@@ -78,15 +78,12 @@ function ensurePlayer(nextSource: Exclude<FocusAudioMode, 'silencio'>) {
       keepAudioSessionActive: true,
     });
     player.loop = true;
-    player.shouldCorrectPitch = true;
-    player.playbackRate = nextSource === 'profundo' ? 0.95 : 1;
     activeSource = nextSource;
     return;
   }
 
   if (activeSource !== nextSource) {
     player.replace(SOURCES[nextSource]);
-    player.playbackRate = nextSource === 'profundo' ? 0.95 : 1;
     activeSource = nextSource;
   }
 }
