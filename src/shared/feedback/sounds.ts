@@ -11,10 +11,17 @@ const SOUND_ASSETS: Record<SoundKind, number> = {
 };
 
 const SOUND_VOLUME: Record<SoundKind, number> = {
-  victory: 0.45,
+  victory: 0.78,
   defeat: 0.4,
   error: 0.3,
   success: 0.2,
+};
+
+const SOUND_RATE: Record<SoundKind, number> = {
+  victory: 1.03,
+  defeat: 1,
+  error: 1,
+  success: 1,
 };
 
 let audioConfigured = false;
@@ -39,6 +46,8 @@ async function playSound(kind: SoundKind) {
     const { sound } = await Audio.Sound.createAsync(SOUND_ASSETS[kind], {
       shouldPlay: true,
       volume: SOUND_VOLUME[kind],
+      rate: SOUND_RATE[kind],
+      shouldCorrectPitch: true,
       isLooping: false,
       progressUpdateIntervalMillis: 250,
     });

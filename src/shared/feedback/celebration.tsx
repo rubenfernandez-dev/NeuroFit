@@ -24,8 +24,8 @@ const listeners = new Set<Listener>();
 export function triggerCelebration(options?: { durationMs?: number; particleCount?: number }) {
   const event: CelebrationEvent = {
     key: nextEventKey++,
-    durationMs: Math.max(400, options?.durationMs ?? 1400),
-    particleCount: Math.max(8, options?.particleCount ?? 18),
+    durationMs: Math.max(700, options?.durationMs ?? 1650),
+    particleCount: Math.max(12, options?.particleCount ?? 28),
   };
   listeners.forEach((listener) => listener(event));
 }
@@ -62,11 +62,11 @@ export function CelebrationOverlay() {
     animationsRef.current = [];
 
     particlesRef.current = Array.from({ length: event.particleCount }, (_, index) => ({
-      x: ((index + 0.5) * width) / event.particleCount,
-      size: 5 + (index % 4),
+      x: ((index + 0.5) * width) / event.particleCount + (((index * 17) % 11) - 5) * 3,
+      size: 7 + (index % 6),
       color: palette[index % palette.length],
-      drift: (index % 2 === 0 ? -1 : 1) * (10 + (index % 5) * 4),
-      rotateDeg: (index % 2 === 0 ? -1 : 1) * (90 + (index % 6) * 20),
+      drift: (index % 2 === 0 ? -1 : 1) * (22 + (index % 5) * 8),
+      rotateDeg: (index % 2 === 0 ? -1 : 1) * (180 + (index % 6) * 30),
     }));
 
     translateValuesRef.current = particlesRef.current.map(() => new Animated.Value(-18));
@@ -80,7 +80,7 @@ export function CelebrationOverlay() {
       const rotate = rotateValuesRef.current[index];
       return Animated.parallel([
         Animated.timing(translate, {
-          toValue: 260 + index * 3,
+          toValue: 320 + index * 6,
           duration: event.durationMs,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
@@ -116,14 +116,22 @@ export function CelebrationOverlay() {
   if (!event) return null;
 
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}>
       <Animated.View style={[StyleSheet.absoluteFill, { opacity }]}> 
         {particlesRef.current.map((particle, index) => {
           const translateY = translateValuesRef.current[index];
+          const driftX = rotateValuesRef.current[index]?.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0, particle.drift],
+          });
           const endRotateDeg = Number.isFinite(particle.rotateDeg) ? particle.rotateDeg : 0;
           const rotate = rotateValuesRef.current[index]?.interpolate({
             inputRange: [0, 1],
             outputRange: ['0deg', `${endRotateDeg}deg`],
+          });
+          const scale = rotateValuesRef.current[index]?.interpolate({
+            inputRange: [0, 0.15, 1],
+            outputRange: [0.85, 1.12, 0.95],
           });
 
           return (
@@ -132,14 +140,15 @@ export function CelebrationOverlay() {
               style={{
                 position: 'absolute',
                 left: particle.x,
-                top: -8,
+                top: -22,
                 width: particle.size,
                 height: particle.size * 1.4,
                 borderRadius: 2,
                 backgroundColor: particle.color,
                 transform: [
                   { translateY: translateY ?? 0 },
-                  { translateX: particle.drift * (index % 3) },
+                  { translateX: driftX ?? 0 },
+                  { scale: scale ?? 1 },
                   { rotate: rotate ?? '0deg' },
                 ],
               }}

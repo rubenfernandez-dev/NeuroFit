@@ -16,8 +16,17 @@ import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
+
+type ResultSummary = {
+  score: number;
+  earnedXp: number;
+  earnedSp: number;
+  elapsedMs: number;
+  attempts: number;
+};
 
 export default function MemoryScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
@@ -34,6 +43,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [didFinish, setDidFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [resultVisible, setResultVisible] = useState(false);
+  const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
 
   const { cols } = getBoardSize(difficulty);
@@ -93,6 +104,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setAttempts(0);
       setElapsedMs(0);
       setDidFinish(false);
+      setResultVisible(false);
+      setResultSummary(null);
       setSessionStarted(true);
       await trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
     };
@@ -158,10 +171,14 @@ export default function MemoryScreen({ route, navigation }: Props) {
       await clearMemoryState();
       setSessionStarted(false);
       void playVictoryFeedback();
-      Alert.alert(
-        '¡Memory completado!',
-        `Score ${score} · +${completionResult.earnedXp} XP · +${completionResult.earnedSp} SP`,
-      );
+      setResultSummary({
+        score,
+        earnedXp: completionResult.earnedXp,
+        earnedSp: completionResult.earnedSp,
+        elapsedMs,
+        attempts,
+      });
+      setResultVisible(true);
       setFinishing(false);
     };
     finalize();
@@ -201,11 +218,14 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setAttempts(0);
     setElapsedMs(0);
     setDidFinish(false);
+    setResultVisible(false);
+    setResultSummary(null);
     setSessionStarted(true);
     trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
   };
 
   return (
+    <>
     <Screen>
       <Card variant="cyan">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Memory · {difficultyLabel(difficulty)}</Text>
@@ -242,5 +262,35 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
       <Button title="Reiniciar" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
     </Screen>
+    <GameResultModal
+      visible={resultVisible}
+      onRequestClose={() => setResultVisible(false)}
+      variant="victory"
+      title="¡Memory completado!"
+      subtitle="Gran memoria visual, sigue sumando racha."
+      metrics={[
+        { label: 'Score', value: resultSummary?.score ?? 0 },
+        { label: 'Intentos', value: resultSummary?.attempts ?? 0 },
+        { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
+        { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
+        { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },
+      ]}
+      primaryAction={{
+        label: 'Jugar de nuevo',
+        onPress: () => {
+          setResultVisible(false);
+          restart();
+        },
+      }}
+      secondaryAction={{
+        label: 'Ver ranking local',
+        variant: 'secondary',
+        onPress: () => {
+          setResultVisible(false);
+          navigation.navigate('Leaderboard');
+        },
+      }}
+    />
+    </>
   );
 }

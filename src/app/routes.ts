@@ -1,4 +1,5 @@
 import { Difficulty, GameId } from '../games/types';
+import { GAMES } from '../games/registry';
 
 export type GameSessionMode = 'normal' | 'daily';
 
@@ -70,3 +71,12 @@ export type RootStackParamList = {
   PatternMemory: GameRouteParams | undefined;
   FocusGrid: GameRouteParams | undefined;
 };
+
+export type GameStackRouteName = (typeof GAMES)[number]['routeName'];
+
+const GAME_ROUTE_NAMES = new Set<GameStackRouteName>(GAMES.map((game) => game.routeName));
+
+export function isGameRouteName(routeName?: string): routeName is GameStackRouteName {
+  if (!routeName) return false;
+  return GAME_ROUTE_NAMES.has(routeName as GameStackRouteName);
+}

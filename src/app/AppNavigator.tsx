@@ -1,7 +1,7 @@
-import React from 'react';
-import { NavigationContainer, DefaultTheme, DarkTheme } from '@react-navigation/native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { NavigationContainer, DefaultTheme, DarkTheme, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { RootStackParamList } from './routes';
+import { isGameRouteName, RootStackParamList } from './routes';
 import { DailyChallengeScreen, GamesScreen, HomeScreen, LeaderboardScreen, ProgressScreen, SettingsScreen } from '../screens';
 import { SudokuScreen } from '../games/sudoku';
 import { MemoryScreen } from '../games/memory';
@@ -10,14 +10,42 @@ import { SpeedMatchScreen } from '../games/speedmatch';
 import { PatternMemoryScreen } from '../games/patternmemory';
 import { FocusGridScreen } from '../games/focusgrid';
 import { useAppTheme } from '../shared/theme/theme';
+import { startFocusAmbient, stopFocusAmbient } from '../shared/feedback/focusAudio';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function AppNavigator() {
   const { theme } = useAppTheme();
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList> | null>(null);
+  const wasOnGameRouteRef = useRef(false);
+
+  const syncAmbientByRoute = useCallback((routeName?: string) => {
+    const isGameRoute = isGameRouteName(routeName);
+
+    if (isGameRoute && !wasOnGameRouteRef.current) {
+      void startFocusAmbient({ fadeInMs: 620 });
+    } else if (!isGameRoute && wasOnGameRouteRef.current) {
+      void stopFocusAmbient({ fadeOutMs: 420 });
+    }
+
+    wasOnGameRouteRef.current = isGameRoute;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      void stopFocusAmbient({ fadeOutMs: 120 });
+    };
+  }, []);
 
   return (
     <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        syncAmbientByRoute(navigationRef.current?.getCurrentRoute()?.name);
+      }}
+      onStateChange={() => {
+        syncAmbientByRoute(navigationRef.current?.getCurrentRoute()?.name);
+      }}
       theme={
         theme.mode === 'dark'
           ? {

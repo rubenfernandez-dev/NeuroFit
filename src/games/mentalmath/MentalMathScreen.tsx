@@ -15,8 +15,17 @@ import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
+
+type ResultSummary = {
+  correct: number;
+  wrong: number;
+  score: number;
+  earnedXp: number;
+  earnedSp: number;
+};
 
 export default function MentalMathScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
@@ -33,6 +42,8 @@ export default function MentalMathScreen({ route, navigation }: Props) {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [didFinish, setDidFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const [resultVisible, setResultVisible] = useState(false);
+  const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
 
   useEffect(() => {
@@ -93,6 +104,8 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       setInputValue('');
       setSessionStarted(true);
       setDidFinish(false);
+      setResultVisible(false);
+      setResultSummary(null);
       await trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
     };
 
@@ -192,10 +205,14 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     await clearMentalMathState();
     setSessionStarted(false);
     void playVictoryFeedback();
-    Alert.alert(
-      'Sesión terminada',
-      `Aciertos: ${correct} · +${completionResult.earnedXp} XP · +${completionResult.earnedSp} SP`,
-    );
+    setResultSummary({
+      correct,
+      wrong,
+      score,
+      earnedXp: completionResult.earnedXp,
+      earnedSp: completionResult.earnedSp,
+    });
+    setResultVisible(true);
     setFinishing(false);
   };
 
@@ -237,11 +254,14 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     setTimeLeft(60);
     setInputValue('');
     setDidFinish(false);
+    setResultVisible(false);
+    setResultSummary(null);
     setSessionStarted(true);
     trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
   };
 
   return (
+    <>
     <Screen>
       <HUD timeLeft={timeLeft} correct={correct} wrong={wrong} />
 
@@ -280,5 +300,35 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
       <Button title="Reiniciar" variant="ghost" onPress={resetSession} disabled={isDaily || !!dailyBlockedReason} />
     </Screen>
+    <GameResultModal
+      visible={resultVisible}
+      onRequestClose={() => setResultVisible(false)}
+      variant="victory"
+      title="¡Sesión terminada!"
+      subtitle="Buen cálculo mental, sigue así."
+      metrics={[
+        { label: 'Aciertos', value: resultSummary?.correct ?? 0 },
+        { label: 'Fallos', value: resultSummary?.wrong ?? 0 },
+        { label: 'Score', value: resultSummary?.score ?? 0 },
+        { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
+        { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },
+      ]}
+      primaryAction={{
+        label: 'Jugar de nuevo',
+        onPress: () => {
+          setResultVisible(false);
+          resetSession();
+        },
+      }}
+      secondaryAction={{
+        label: 'Ver ranking local',
+        variant: 'secondary',
+        onPress: () => {
+          setResultVisible(false);
+          navigation.navigate('Leaderboard');
+        },
+      }}
+    />
+    </>
   );
 }

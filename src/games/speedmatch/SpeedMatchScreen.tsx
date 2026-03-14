@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -15,6 +15,7 @@ import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/da
 import { clearSpeedMatchState, getSpeedMatchState, saveSpeedMatchState } from './storage/speedmatchState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
 
@@ -382,51 +383,37 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
         <Button title="Reiniciar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
       </Screen>
 
-      <Modal visible={resultVisible} transparent animationType="fade" onRequestClose={() => setResultVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: theme.spacing.lg }}>
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-              backgroundColor: theme.colors.background,
-              opacity: 0.78,
-            }}
-          />
-          <Card>
-            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Sesión completada</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>Score: {resultSummary?.score ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Aciertos: {resultSummary?.correct ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Fallos: {resultSummary?.mistakes ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Precisión: {resultSummary?.accuracyPct ?? 0}%</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Tiempo: {msToClock(resultSummary?.elapsedMs ?? 0)}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>XP: +{resultSummary?.earnedXp ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>SP: +{resultSummary?.earnedSp ?? 0}</Text>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-              <Button
-                title="Jugar de nuevo"
-                onPress={() => {
-                  setResultVisible(false);
-                  restart();
-                }}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Ver ranking local"
-                variant="secondary"
-                onPress={() => {
-                  setResultVisible(false);
-                  navigation.navigate('Leaderboard');
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </Card>
-        </View>
-      </Modal>
+      <GameResultModal
+        visible={resultVisible}
+        onRequestClose={() => setResultVisible(false)}
+        variant="victory"
+        title="¡Sesión completada!"
+        subtitle="Buen foco y velocidad de decisión."
+        metrics={[
+          { label: 'Score', value: resultSummary?.score ?? 0 },
+          { label: 'Aciertos', value: resultSummary?.correct ?? 0 },
+          { label: 'Fallos', value: resultSummary?.mistakes ?? 0 },
+          { label: 'Precisión', value: `${resultSummary?.accuracyPct ?? 0}%` },
+          { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
+          { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
+          { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },
+        ]}
+        primaryAction={{
+          label: 'Jugar de nuevo',
+          onPress: () => {
+            setResultVisible(false);
+            restart();
+          },
+        }}
+        secondaryAction={{
+          label: 'Ver ranking local',
+          variant: 'secondary',
+          onPress: () => {
+            setResultVisible(false);
+            navigation.navigate('Leaderboard');
+          },
+        }}
+      />
     </>
   );
 }

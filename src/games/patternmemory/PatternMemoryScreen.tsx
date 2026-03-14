@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Easing, Modal, Pressable, Text, View } from 'react-native';
+import { Alert, Animated, Easing, Pressable, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -26,6 +26,7 @@ import { PatternMemoryFinishReason, PatternMemoryGameResult, TileId } from './ty
 import { clearPatternMemoryState, getPatternMemoryState, savePatternMemoryState } from './storage/patternMemoryState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatternMemory'>;
 
@@ -37,6 +38,7 @@ type ResultSummary = {
   maxSequence: number;
   accuracy: number;
   reactionTimeAvg: number;
+  won: boolean;
   xpGained: number;
   spGained: number;
   performance: number;
@@ -433,6 +435,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         maxSequence,
         accuracy,
         reactionTimeAvg,
+        won,
         xpGained: completionResult.earnedXp,
         spGained: completionResult.earnedSp,
         performance,
@@ -655,51 +658,37 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         <Button title="Reintentar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
       </Screen>
 
-      <Modal visible={resultVisible} transparent animationType="fade" onRequestClose={() => setResultVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: theme.spacing.lg }}>
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-              backgroundColor: theme.colors.background,
-              opacity: 0.78,
-            }}
-          />
-          <Card>
-            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Sesión finalizada</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>Score: {resultSummary?.score ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Max secuencia: {resultSummary?.maxSequence ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Precisión: {resultSummary?.accuracy ?? 0}%</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>RT medio: {resultSummary?.reactionTimeAvg ?? 0} ms</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Tiempo: {msToClock(resultSummary?.elapsedMs ?? 0)}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>XP: +{resultSummary?.xpGained ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>SP: +{resultSummary?.spGained ?? 0}</Text>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-              <Button
-                title="Jugar de nuevo"
-                onPress={() => {
-                  setResultVisible(false);
-                  restart();
-                }}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Ver ranking local"
-                variant="secondary"
-                onPress={() => {
-                  setResultVisible(false);
-                  navigation.navigate('Leaderboard');
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </Card>
-        </View>
-      </Modal>
+      <GameResultModal
+        visible={resultVisible}
+        onRequestClose={() => setResultVisible(false)}
+        variant={resultSummary?.won ? 'victory' : 'defeat'}
+        title={resultSummary?.won ? '¡Secuencia dominada!' : 'Sesión finalizada'}
+        subtitle={resultSummary?.won ? 'Memoria y ritmo en muy buena forma.' : 'Vuelve a intentarlo y mejora tu secuencia máxima.'}
+        metrics={[
+          { label: 'Score', value: resultSummary?.score ?? 0 },
+          { label: 'Secuencia máxima', value: resultSummary?.maxSequence ?? 0 },
+          { label: 'Precisión', value: `${resultSummary?.accuracy ?? 0}%` },
+          { label: 'RT medio', value: `${resultSummary?.reactionTimeAvg ?? 0} ms` },
+          { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
+          { label: 'XP', value: `+${resultSummary?.xpGained ?? 0}` },
+          { label: 'SP', value: `+${resultSummary?.spGained ?? 0}` },
+        ]}
+        primaryAction={{
+          label: 'Jugar de nuevo',
+          onPress: () => {
+            setResultVisible(false);
+            restart();
+          },
+        }}
+        secondaryAction={{
+          label: 'Ver ranking local',
+          variant: 'secondary',
+          onPress: () => {
+            setResultVisible(false);
+            navigation.navigate('Leaderboard');
+          },
+        }}
+      />
     </>
   );
 }

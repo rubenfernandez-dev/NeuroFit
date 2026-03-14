@@ -16,6 +16,7 @@
     "@sentry/react-native": "^8.4.0",
     "expo": "~55.0.5",
     "expo-asset": "~55.0.8",
+    "expo-audio": "^55.0.8",
     "expo-av": "^16.0.8",
     "expo-haptics": "~55.0.8",
     "expo-notifications": "~55.0.12",

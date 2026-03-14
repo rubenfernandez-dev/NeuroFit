@@ -31,6 +31,7 @@ type ResultSummary = {
   mistakes: number;
   accuracy: number;
   completionTimeMs: number;
+  won: boolean;
   xpGained: number;
   spGained: number;
   performance: number;
@@ -304,6 +305,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         mistakes,
         accuracy: finalizedResult.accuracy,
         completionTimeMs: finalizedResult.completionTimeMs,
+        won: finalizedResult.completed,
         xpGained: completionResult.earnedXp,
         spGained: completionResult.earnedSp,
         performance: finalizedResult.performance,
@@ -460,7 +462,6 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       <FocusGridResultModal
         visible={resultVisible}
         resultSummary={resultSummary}
-        theme={theme}
         onClose={() => setResultVisible(false)}
         onRestart={() => {
           setResultVisible(false);

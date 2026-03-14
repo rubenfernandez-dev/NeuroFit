@@ -10,6 +10,7 @@ const defaultPrefs: FeedbackPrefs = {
   soundEnabled: true,
   hapticsEnabled: true,
   celebrationEnabled: true,
+  focusAudioMode: 'silencio',
 };
 
 export async function getFeedbackPrefs(): Promise<FeedbackPrefs> {
@@ -24,6 +25,16 @@ export async function getFeedbackPrefs(): Promise<FeedbackPrefs> {
       hapticsEnabled: typeof parsed.hapticsEnabled === 'boolean' ? parsed.hapticsEnabled : defaultPrefs.hapticsEnabled,
       celebrationEnabled:
         typeof parsed.celebrationEnabled === 'boolean' ? parsed.celebrationEnabled : defaultPrefs.celebrationEnabled,
+      focusAudioMode:
+        parsed.focusAudioMode === 'suave' || parsed.focusAudioMode === 'profundo' || parsed.focusAudioMode === 'silencio'
+          ? parsed.focusAudioMode
+          : parsed.focusAudioMode === 'soft'
+            ? 'suave'
+            : parsed.focusAudioMode === 'deep'
+              ? 'profundo'
+              : parsed.focusAudioMode === 'silence'
+                ? 'silencio'
+                : defaultPrefs.focusAudioMode,
     };
   } catch (error) {
     logWarning('storage.feedback.corrupt_or_invalid', { storageKey: STORAGE_KEYS.feedback });

@@ -25,9 +25,15 @@ import {
   type FeedbackPrefs,
 } from '../shared/storage/feedback';
 import { updateGameFeedbackPreferences } from '../shared/feedback/gameFeedback';
+import type { FocusAudioMode } from '../shared/feedback/focusAudio';
 import { captureException, logWarning } from '../shared/observability';
 
 const options: ThemePreference[] = ['system', 'light', 'dark'];
+const focusAudioOptions: Array<{ mode: FocusAudioMode; label: string }> = [
+  { mode: 'silencio', label: 'Silencio' },
+  { mode: 'suave', label: 'Suave' },
+  { mode: 'profundo', label: 'Profundo' },
+];
 
 type SettingsStatus = {
   kind: 'success' | 'warning' | 'error';
@@ -417,6 +423,27 @@ export default function SettingsScreen() {
               trackColor={{ false: theme.colors.border, true: theme.colors.primarySoft }}
               thumbColor={feedbackPrefs?.celebrationEnabled ? theme.colors.primary : theme.colors.textMuted}
             />
+          </View>
+
+          <View style={{ marginTop: 2 }}>
+            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Ambiente de concentración</Text>
+            <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 4 }]}>Solo suena durante partidas y puedes apagarlo cuando quieras.</Text>
+            <View style={{ marginTop: 8, gap: 8 }}>
+              {focusAudioOptions.map((option) => {
+                const isSelected = (feedbackPrefs?.focusAudioMode ?? 'silencio') === option.mode;
+                return (
+                  <Button
+                    key={option.mode}
+                    title={isSelected ? `✓ ${option.label}` : option.label}
+                    variant={isSelected ? 'primary' : 'secondary'}
+                    disabled={isUpdatingFeedback}
+                    onPress={() => {
+                      toggleFeedback({ focusAudioMode: option.mode });
+                    }}
+                  />
+                );
+              })}
+            </View>
           </View>
         </View>
 

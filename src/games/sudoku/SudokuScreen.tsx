@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Modal, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -20,6 +20,7 @@ import Pill from '../../shared/ui/Pill';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -529,48 +530,34 @@ export default function SudokuScreen({ route, navigation }: Props) {
         />
       </Screen>
 
-      <Modal visible={victoryVisible} transparent animationType="fade" onRequestClose={() => setVictoryVisible(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: theme.spacing.lg }}>
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-              backgroundColor: theme.colors.background,
-              opacity: 0.78,
-            }}
-          />
-          <Card>
-            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>¡Completado!</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>XP: +{victorySummary?.earnedXp ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>SP: +{victorySummary?.earnedSp ?? 0}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Tiempo: {msToClock(victorySummary?.elapsedMs ?? 0)}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>Fallos: {victorySummary?.mistakes ?? 0}</Text>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-              <Button
-                title="Nueva partida"
-                onPress={() => {
-                  setVictoryVisible(false);
-                  handleNew();
-                }}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title="Ver ranking local"
-                variant="secondary"
-                onPress={() => {
-                  setVictoryVisible(false);
-                  navigation.navigate('Leaderboard');
-                }}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </Card>
-        </View>
-      </Modal>
+      <GameResultModal
+        visible={victoryVisible}
+        onRequestClose={() => setVictoryVisible(false)}
+        variant="victory"
+        title="¡Sudoku completado!"
+        subtitle="Tablero limpio y victoria asegurada."
+        metrics={[
+          { label: 'XP', value: `+${victorySummary?.earnedXp ?? 0}` },
+          { label: 'SP', value: `+${victorySummary?.earnedSp ?? 0}` },
+          { label: 'Tiempo', value: msToClock(victorySummary?.elapsedMs ?? 0) },
+          { label: 'Fallos', value: victorySummary?.mistakes ?? 0 },
+        ]}
+        primaryAction={{
+          label: 'Nueva partida',
+          onPress: () => {
+            setVictoryVisible(false);
+            handleNew();
+          },
+        }}
+        secondaryAction={{
+          label: 'Ver ranking local',
+          variant: 'secondary',
+          onPress: () => {
+            setVictoryVisible(false);
+            navigation.navigate('Leaderboard');
+          },
+        }}
+      />
     </>
   );
 }
