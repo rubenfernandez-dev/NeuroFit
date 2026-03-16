@@ -16,7 +16,7 @@ const prefs: GameFeedbackPreferences = {
   soundEnabled: true,
   hapticsEnabled: true,
   celebrationEnabled: true,
-  focusAudioMode: 'silencio',
+  focusAudioMode: 'lluvia',
 };
 
 export function updateGameFeedbackPreferences(next: Partial<GameFeedbackPreferences>) {

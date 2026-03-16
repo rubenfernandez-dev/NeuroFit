@@ -31,8 +31,10 @@ import { captureException, logWarning } from '../shared/observability';
 const options: ThemePreference[] = ['system', 'light', 'dark'];
 const focusAudioOptions: Array<{ mode: FocusAudioMode; label: string }> = [
   { mode: 'silencio', label: 'Silencio' },
-  { mode: 'suave', label: 'Suave' },
-  { mode: 'profundo', label: 'Profundo' },
+  { mode: 'suave', label: 'Suave (armónico)' },
+  { mode: 'profundo', label: 'Profundo (grave)' },
+  { mode: 'lluvia', label: 'Lluvia' },
+  { mode: 'naturaleza', label: 'Naturaleza' },
 ];
 
 type SettingsStatus = {
@@ -430,7 +432,7 @@ export default function SettingsScreen() {
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 4 }]}>Solo suena durante partidas y puedes apagarlo cuando quieras.</Text>
             <View style={{ marginTop: 8, gap: 8 }}>
               {focusAudioOptions.map((option) => {
-                const isSelected = (feedbackPrefs?.focusAudioMode ?? 'silencio') === option.mode;
+                const isSelected = (feedbackPrefs?.focusAudioMode ?? 'lluvia') === option.mode;
                 return (
                   <Button
                     key={option.mode}

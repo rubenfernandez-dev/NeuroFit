@@ -134,17 +134,23 @@ export function CelebrationOverlay() {
 
   return (
     <Modal transparent visible animationType="none" onRequestClose={() => undefined} statusBarTranslucent>
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999 }]}>
+      <View
+        pointerEvents="none"
+        style={{
+          flex: 1,
+          backgroundColor: 'transparent',
+        }}
+      >
         <Animated.View
           style={[
-            StyleSheet.absoluteFill,
+            StyleSheet.absoluteFillObject,
             {
               opacity: flashOpacity,
               backgroundColor: theme.mode === 'dark' ? '#FFFFFF' : theme.colors.primarySoft,
             },
           ]}
         />
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity }]}> 
+        <Animated.View style={[StyleSheet.absoluteFillObject, { opacity }]}> 
           {particlesRef.current.map((particle, index) => {
             const translateY = translateValuesRef.current[index];
             const driftX = rotateValuesRef.current[index]?.interpolate({

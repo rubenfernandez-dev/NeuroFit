@@ -1,7 +1,7 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { captureException, logWarning } from '../observability';
 
-export type FocusAudioMode = 'silencio' | 'suave' | 'profundo';
+export type FocusAudioMode = 'silencio' | 'suave' | 'profundo' | 'lluvia' | 'naturaleza';
 
 type FocusStartOptions = {
   fadeInMs?: number;
@@ -14,11 +14,15 @@ type FocusStopOptions = {
 const SOURCES: Record<Exclude<FocusAudioMode, 'silencio'>, number> = {
   suave: require('../../../assets/focus/soft.wav'),
   profundo: require('../../../assets/focus/deep.wav'),
+  lluvia: require('../../../assets/focus/rain.wav'),
+  naturaleza: require('../../../assets/focus/nature.wav'),
 };
 
 const TARGET_VOLUME: Record<Exclude<FocusAudioMode, 'silencio'>, number> = {
-  suave: 0.23,
-  profundo: 0.34,
+  suave: 0.2,
+  profundo: 0.28,
+  lluvia: 0.24,
+  naturaleza: 0.22,
 };
 
 let configured = false;

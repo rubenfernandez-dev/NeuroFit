@@ -10,7 +10,7 @@ const defaultPrefs: FeedbackPrefs = {
   soundEnabled: true,
   hapticsEnabled: true,
   celebrationEnabled: true,
-  focusAudioMode: 'silencio',
+  focusAudioMode: 'lluvia',
 };
 
 export async function getFeedbackPrefs(): Promise<FeedbackPrefs> {
@@ -26,12 +26,20 @@ export async function getFeedbackPrefs(): Promise<FeedbackPrefs> {
       celebrationEnabled:
         typeof parsed.celebrationEnabled === 'boolean' ? parsed.celebrationEnabled : defaultPrefs.celebrationEnabled,
       focusAudioMode:
-        parsed.focusAudioMode === 'suave' || parsed.focusAudioMode === 'profundo' || parsed.focusAudioMode === 'silencio'
+        parsed.focusAudioMode === 'suave' ||
+        parsed.focusAudioMode === 'profundo' ||
+        parsed.focusAudioMode === 'lluvia' ||
+        parsed.focusAudioMode === 'naturaleza' ||
+        parsed.focusAudioMode === 'silencio'
           ? parsed.focusAudioMode
           : parsed.focusAudioMode === 'soft'
             ? 'suave'
             : parsed.focusAudioMode === 'deep'
               ? 'profundo'
+            : parsed.focusAudioMode === 'rain'
+              ? 'lluvia'
+            : parsed.focusAudioMode === 'nature'
+                ? 'naturaleza'
               : parsed.focusAudioMode === 'silence'
                 ? 'silencio'
                 : defaultPrefs.focusAudioMode,
