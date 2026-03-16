@@ -40,12 +40,12 @@ export async function playVictoryFeedback() {
   if (!prefs.enabled) return;
 
   if (prefs.celebrationEnabled) triggerCelebration({ durationMs: 2200, particleCount: 52 });
-  void stopFocusAmbient({ fadeOutMs: 180 });
+  await stopFocusAmbient({ fadeOutMs: 120 });
 
   const tasks: Array<Promise<unknown>> = [];
   if (prefs.soundEnabled) {
     tasks.push(
-      wait(90).then(() => playVictorySound()),
+      wait(40).then(() => playVictorySound()),
     );
   }
   if (prefs.hapticsEnabled) {

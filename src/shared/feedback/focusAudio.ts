@@ -21,8 +21,8 @@ const SOURCES: Record<Exclude<FocusAudioMode, 'silencio'>, number> = {
 const TARGET_VOLUME: Record<Exclude<FocusAudioMode, 'silencio'>, number> = {
   suave: 0.2,
   profundo: 0.28,
-  lluvia: 0.24,
-  naturaleza: 0.22,
+  lluvia: 0.34,
+  naturaleza: 0.32,
 };
 
 let configured = false;
