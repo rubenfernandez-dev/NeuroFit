@@ -44,6 +44,16 @@ function emit(level: 'warning' | 'error', event: string, context: LogContext = {
   }
 }
 
+function emitInfo(event: string, context: LogContext = {}) {
+  const payload = {
+    ts: new Date().toISOString(),
+    level: 'info',
+    event,
+    context,
+  };
+  console.info(JSON.stringify(payload));
+}
+
 export function logWarning(event: string, context: LogContext = {}) {
   emit('warning', event, context);
 }
@@ -72,7 +82,7 @@ export function initCrashReporting() {
   const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
   if (!dsn) {
     if (!sentryDisabledLogged) {
-      logWarning('observability.sentry.disabled', { reason: 'missing_dsn' });
+      emitInfo('observability.sentry.disabled', { reason: 'missing_dsn' });
       sentryDisabledLogged = true;
     }
     return false;

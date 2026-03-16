@@ -1,4 +1,4 @@
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { logWarning } from '../observability';
 
 type SoundKind = 'victory' | 'defeat' | 'error' | 'success';
@@ -17,25 +17,15 @@ const SOUND_VOLUME: Record<SoundKind, number> = {
   success: 0.2,
 };
 
-const SOUND_RATE: Record<SoundKind, number> = {
-  victory: 1,
-  defeat: 1,
-  error: 1,
-  success: 1,
-};
-
 let audioConfigured = false;
+const activePlayers = new Set<ReturnType<typeof createAudioPlayer>>();
 
 async function ensureAudioConfigured() {
   if (audioConfigured) return;
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: false,
-    playsInSilentModeIOS: true,
-    interruptionModeIOS: InterruptionModeIOS.DuckOthers,
-    interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
-    shouldDuckAndroid: true,
-    staysActiveInBackground: false,
-    playThroughEarpieceAndroid: false,
+  await setAudioModeAsync({
+    playsInSilentMode: true,
+    shouldPlayInBackground: false,
+    interruptionMode: 'duckOthers',
   });
   audioConfigured = true;
 }
@@ -43,21 +33,22 @@ async function ensureAudioConfigured() {
 async function playSound(kind: SoundKind) {
   try {
     await ensureAudioConfigured();
-    const { sound } = await Audio.Sound.createAsync(SOUND_ASSETS[kind], {
-      shouldPlay: true,
-      volume: SOUND_VOLUME[kind],
-      rate: SOUND_RATE[kind],
-      shouldCorrectPitch: true,
-      isLooping: false,
-      progressUpdateIntervalMillis: 250,
+    const player = createAudioPlayer(SOUND_ASSETS[kind], {
+      updateInterval: 250,
+      keepAudioSessionActive: true,
+    });
+    player.volume = SOUND_VOLUME[kind];
+    player.loop = false;
+
+    activePlayers.add(player);
+    const subscription = player.addListener('playbackStatusUpdate', (status) => {
+      if (!status.didJustFinish) return;
+      subscription.remove();
+      activePlayers.delete(player);
+      player.remove();
     });
 
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (!status.isLoaded) return;
-      if (status.didJustFinish) {
-        sound.unloadAsync();
-      }
-    });
+    player.play();
   } catch (error) {
     // Best-effort feedback: gameplay should never fail due to audio issues.
     logWarning('feedback.audio.play_failed', {
