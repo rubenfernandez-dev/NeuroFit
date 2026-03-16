@@ -79,6 +79,8 @@ export default function AppNavigator() {
           headerTintColor: theme.colors.text,
           headerShadowVisible: false,
           contentStyle: { backgroundColor: theme.colors.background },
+          animation: 'slide_from_right',
+          gestureEnabled: true,
         }}
       >
         <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'NeuroFit' }} />
@@ -88,11 +90,11 @@ export default function AppNavigator() {
         <Stack.Screen name="Progress" component={ProgressScreen} options={{ title: 'Progreso' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Ajustes' }} />
         <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: 'Sudoku' }} />
-        <Stack.Screen name="Memory" component={MemoryScreen} options={{ title: 'Memory' }} />
-        <Stack.Screen name="MentalMath" component={MentalMathScreen} options={{ title: 'Mental Math' }} />
-        <Stack.Screen name="SpeedMatch" component={SpeedMatchScreen} options={{ title: 'Speed Match' }} />
-        <Stack.Screen name="PatternMemory" component={PatternMemoryScreen} options={{ title: 'Pattern Memory' }} />
-        <Stack.Screen name="FocusGrid" component={FocusGridScreen} options={{ title: 'Focus Grid' }} />
+        <Stack.Screen name="Memory" component={MemoryScreen} options={{ title: 'Memoria' }} />
+        <Stack.Screen name="MentalMath" component={MentalMathScreen} options={{ title: 'Cálculo mental' }} />
+        <Stack.Screen name="SpeedMatch" component={SpeedMatchScreen} options={{ title: 'Coincidencia rápida' }} />
+        <Stack.Screen name="PatternMemory" component={PatternMemoryScreen} options={{ title: 'Memoria de patrones' }} />
+        <Stack.Screen name="FocusGrid" component={FocusGridScreen} options={{ title: 'Cuadrícula de enfoque' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

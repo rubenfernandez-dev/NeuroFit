@@ -8,9 +8,9 @@ import { generateWeeklyLeaderboard, LeaderboardEntry } from '../shared/leaderboa
 import { getLeagueById, getNextLeague } from '../shared/gamification/leagues';
 import Screen from '../shared/ui/Screen';
 import Pill from '../shared/ui/Pill';
-import ProgressBar from '../shared/ui/ProgressBar';
 import Button from '../shared/ui/Button';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
+import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 
 export default function LeaderboardScreen() {
   const { theme } = useAppTheme();
@@ -67,6 +67,38 @@ export default function LeaderboardScreen() {
 
   const top10Cut = entries.find((entry) => entry.rank === 10)?.seasonPoints ?? seasonPoints;
   const spToTop10 = Math.max(0, top10Cut - seasonPoints + 1);
+  const leagueAccent =
+    leagueId === 'bronze'
+      ? '#CD7F32'
+      : leagueId === 'silver'
+        ? '#94A3B8'
+        : leagueId === 'gold'
+          ? '#F59E0B'
+          : leagueId === 'platinum'
+            ? '#06B6D4'
+            : leagueId === 'diamond'
+              ? '#60A5FA'
+              : leagueId === 'master'
+                ? '#EC4899'
+                : leagueId === 'grand_master'
+                  ? '#F97316'
+                  : '#A78BFA';
+  const tierIcon =
+    leagueId === 'bronze'
+      ? '🥉'
+      : leagueId === 'silver'
+        ? '🥈'
+        : leagueId === 'gold'
+          ? '🥇'
+          : leagueId === 'platinum'
+            ? '🏆'
+            : leagueId === 'diamond'
+              ? '💎'
+              : leagueId === 'master'
+                ? '🧠'
+                : leagueId === 'grand_master'
+                  ? '🔥'
+                  : '👑';
 
   return (
     <Screen>
@@ -79,22 +111,32 @@ export default function LeaderboardScreen() {
         </Card>
       ) : null}
 
-      <Card variant="primary">
-        <Text style={[theme.typography.h2, { color: theme.colors.text }]}>
-          {league.badgeEmoji} Liga {league.name}
-        </Text>
+      <Card
+        style={{
+          borderColor: `${leagueAccent}66`,
+          borderWidth: 1,
+          backgroundColor: theme.mode === 'dark' ? theme.colors.bg1 : `${leagueAccent}11`,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={{ fontSize: 30 }}>{tierIcon}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Liga {league.name}</Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Temporada {seasonId}</Text>
+          </View>
+        </View>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
           <Pill label={`${seasonPoints} SP`} tone="cyan" />
           <Pill label={`Puesto #${rank}`} tone={rank <= 10 ? 'success' : rank >= 41 ? 'danger' : 'default'} />
         </View>
         <View style={{ marginTop: 12 }}>
-          <ProgressBar value={progress} label={nextLeague ? `Objetivo ${nextLeague.name}` : 'Liga máxima alcanzada'} />
+          <AnimatedProgressBar value={progress} color={leagueAccent} label={nextLeague ? `Objetivo ${nextLeague.name}` : 'Liga máxima alcanzada'} durationMs={520} />
         </View>
-        <Text style={{ color: theme.colors.muted, marginTop: 8 }}>
-          {spToTop10 > 0 ? `Te faltan ${spToTop10} SP para Top 10` : '¡Ya estás en zona de ascenso!'}
-        </Text>
-        <Text style={{ color: theme.colors.muted, marginTop: 6 }}>Temporada: {seasonId} (reinicio los lunes)</Text>
-        <Text style={{ color: theme.colors.muted, marginTop: 6 }}>
+        <View style={{ marginTop: 10 }}>
+          <AnimatedProgressBar value={spToTop10 > 0 ? Math.max(0, Math.min(1, seasonPoints / (seasonPoints + spToTop10))) : 1} color={leagueAccent} label={spToTop10 > 0 ? `Te faltan ${spToTop10} SP para Top 10` : '¡Ya estás en zona de ascenso!'} durationMs={520} height={10} />
+        </View>
+        <Text style={{ color: theme.colors.muted, marginTop: 8 }}>Reinicio de temporada cada lunes</Text>
+        <Text style={{ color: theme.colors.muted, marginTop: 4 }}>
           Ranking local simulado en este dispositivo (sin backend global).
         </Text>
       </Card>
@@ -118,7 +160,7 @@ export default function LeaderboardScreen() {
               flexDirection: 'row',
               alignItems: 'center',
               gap: 10,
-              paddingVertical: 9,
+              paddingVertical: 10,
               paddingHorizontal: 10,
               borderRadius: 14,
               backgroundColor:
@@ -137,7 +179,7 @@ export default function LeaderboardScreen() {
                   : entry.rank >= 41
                     ? theme.colors.red
                     : theme.colors.border,
-              marginBottom: 6,
+              marginBottom: 8,
             }}
           >
             <View

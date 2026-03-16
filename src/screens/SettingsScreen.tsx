@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, ScrollView, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useAppTheme } from '../shared/theme/theme';
 import Button from '../shared/ui/Button';
 import Card from '../shared/ui/Card';
@@ -92,10 +92,10 @@ export default function SettingsScreen() {
   }, [prefs]);
 
   const confirmReset = () => {
-    Alert.alert('Reset progreso', 'Esto borrará stats y perfil.', [
+    Alert.alert('Reiniciar progreso', 'Esto borrará estadísticas y perfil.', [
       { text: 'Cancelar', style: 'cancel' },
       {
-        text: 'Reset',
+        text: 'Reiniciar',
         style: 'destructive',
         onPress: async () => {
           await Promise.all([resetStats(), resetProfile()]);
@@ -299,11 +299,11 @@ export default function SettingsScreen() {
       const next = await updateFeedbackPrefs(partial);
       setFeedbackPrefs(next);
       updateGameFeedbackPreferences(next);
-      setStatus({ kind: 'success', text: 'Ajustes de feedback actualizados.' });
+      setStatus({ kind: 'success', text: 'Ajustes de respuesta actualizados.' });
     } catch (error) {
       captureException(error, { area: 'settings.toggleFeedback', partial });
       await reloadFeedbackPrefs();
-      setStatus({ kind: 'error', text: 'No pudimos guardar los ajustes de feedback.' });
+      setStatus({ kind: 'error', text: 'No pudimos guardar los ajustes de respuesta.' });
     } finally {
       setIsUpdatingFeedback(false);
     }
@@ -312,7 +312,7 @@ export default function SettingsScreen() {
   const masterFeedbackEnabled = feedbackPrefs?.enabled ?? true;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.md }}>
+    <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}>
       {status ? (
         <Card variant={status.kind === 'success' ? 'success' : 'warning'}>
           <Text style={[theme.typography.bodySmall, { color: status.kind === 'success' ? theme.colors.green : theme.colors.red }]}>{status.text}</Text>
@@ -320,7 +320,7 @@ export default function SettingsScreen() {
       ) : null}
 
       <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Tema</Text>
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>🎨 Tema</Text>
         <View style={{ gap: 8, marginTop: 10 }}>
           {options.map((option) => (
             <Button
@@ -337,7 +337,7 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Recordatorio diario</Text>
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>⏰ Recordatorio diario</Text>
         <View style={{ marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[theme.typography.body, { color: theme.colors.text }]}>Recordatorio diario</Text>
           <Switch
@@ -372,11 +372,11 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Feedback de juego</Text>
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>✨ Respuesta del juego</Text>
 
         <View style={{ marginTop: 10, gap: 10 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Feedback global</Text>
+            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Respuesta global</Text>
             <Switch
               value={masterFeedbackEnabled}
               onValueChange={(value) => {
@@ -426,61 +426,73 @@ export default function SettingsScreen() {
               thumbColor={feedbackPrefs?.celebrationEnabled ? theme.colors.primary : theme.colors.textMuted}
             />
           </View>
-
-          <View style={{ marginTop: 2 }}>
-            <Text style={[theme.typography.body, { color: theme.colors.text }]}>Ambiente de concentración</Text>
-            <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 4 }]}>Solo suena durante partidas y puedes apagarlo cuando quieras.</Text>
-            <View style={{ marginTop: 8, gap: 8 }}>
-              {focusAudioOptions.map((option) => {
-                const isSelected = (feedbackPrefs?.focusAudioMode ?? 'lluvia') === option.mode;
-                return (
-                  <Button
-                    key={option.mode}
-                    title={isSelected ? `✓ ${option.label}` : option.label}
-                    variant={isSelected ? 'primary' : 'secondary'}
-                    disabled={isUpdatingFeedback}
-                    onPress={() => {
-                      toggleFeedback({ focusAudioMode: option.mode });
-                    }}
-                  />
-                );
-              })}
-            </View>
-          </View>
         </View>
 
-        <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 8 }]}>Estos ajustes aplican automáticamente a todos los juegos.</Text>
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 10 }]}>Estos ajustes se aplican automáticamente a todos los juegos.</Text>
       </Card>
 
-      <Button title="Reset progreso" onPress={confirmReset} variant="ghost" />
+      <Card>
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>🌿 Ambiente de concentración</Text>
+        <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 6 }]}>Solo suena durante partidas y puedes apagarlo cuando quieras.</Text>
+        <View style={{ marginTop: 10, gap: 8 }}>
+          {focusAudioOptions.map((option) => {
+            const isSelected = (feedbackPrefs?.focusAudioMode ?? 'lluvia') === option.mode;
+            return (
+              <Button
+                key={option.mode}
+                title={isSelected ? `✓ ${option.label}` : option.label}
+                variant={isSelected ? 'primary' : 'secondary'}
+                disabled={isUpdatingFeedback}
+                onPress={() => {
+                  toggleFeedback({ focusAudioMode: option.mode });
+                }}
+              />
+            );
+          })}
+        </View>
+      </Card>
+
+      <Pressable
+        onPress={confirmReset}
+        style={({ pressed }) => [
+          styles.dangerButton,
+          {
+            borderColor: theme.colors.red,
+            backgroundColor: pressed ? `${theme.colors.red}15` : 'transparent',
+            opacity: pressed ? 0.9 : 1,
+          },
+        ]}
+      >
+        <Text style={[theme.typography.label, { color: theme.colors.red }]}>🗑 Reiniciar progreso</Text>
+      </Pressable>
 
       {__DEV__ ? (
         <Card>
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Debug (solo desarrollo)</Text>
+          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Herramientas de desarrollo</Text>
           <View style={{ marginTop: 10, gap: 8 }}>
             <Button
-              title="Reset perfil"
+              title="Reiniciar perfil"
               variant="secondary"
-              onPress={() => confirmDevReset('Reset perfil', 'Borra perfil y nivel.', resetProfile)}
+              onPress={() => confirmDevReset('Reiniciar perfil', 'Borra perfil y nivel.', resetProfile)}
             />
             <Button
-              title="Reset stats"
+              title="Reiniciar estadísticas"
               variant="secondary"
-              onPress={() => confirmDevReset('Reset stats', 'Borra estadísticas de juegos.', resetStats)}
+              onPress={() => confirmDevReset('Reiniciar estadísticas', 'Borra estadísticas de juegos.', resetStats)}
             />
             <Button
-              title="Reset season/SP"
+              title="Reiniciar temporada/SP"
               variant="secondary"
                onPress={() =>
-                 confirmDevReset('Reset season', 'Reinicia temporada, SP y liga.', async () => {
+                 confirmDevReset('Reiniciar temporada', 'Reinicia temporada, SP y liga.', async () => {
                    await resetSeasonProgress();
                  })
                }
             />
             <Button
-              title="Reset todo"
+              title="Reiniciar todo"
               variant="ghost"
-              onPress={() => confirmDevReset('Reset todo', 'Borra perfil, stats, daily y estados de juegos.', resetAllDebug)}
+              onPress={() => confirmDevReset('Reiniciar todo', 'Borra perfil, estadísticas, reto diario y estados de juegos.', resetAllDebug)}
             />
           </View>
         </Card>
@@ -488,3 +500,15 @@ export default function SettingsScreen() {
     </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  dangerButton: {
+    minHeight: 52,
+    borderWidth: 1,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+});

@@ -27,6 +27,8 @@ export function difficultyLabel(difficulty: Difficulty): string {
   return difficulty === 'gran_maestro' ? 'gran maestro' : difficulty;
 }
 
+import type { CognitiveCategory } from '../shared/theme/categoryColors';
+
 export type GameDefinition = {
   id: GameId;
   title: string;
@@ -35,4 +37,6 @@ export type GameDefinition = {
   routeName: 'Sudoku' | 'Memory' | 'MentalMath' | 'SpeedMatch' | 'PatternMemory' | 'FocusGrid';
   difficulties: Difficulty[];
   enabled: boolean;
+  category?: CognitiveCategory;
+  tags?: string[];
 };

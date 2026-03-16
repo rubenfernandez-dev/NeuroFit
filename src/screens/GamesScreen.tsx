@@ -1,17 +1,19 @@
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../app/routes';
 import { enabledGames } from '../games/registry';
 import Card from '../shared/ui/Card';
 import { useAppTheme } from '../shared/theme/theme';
-import { Difficulty, difficultyLabel, GameId } from '../games/types';
+import { Difficulty, GameId } from '../games/types';
 import Screen from '../shared/ui/Screen';
 import { getProfile, setPreferredDifficulty } from '../shared/storage/profile';
 import DifficultyModal from '../components/DifficultyModal';
 import Button from '../shared/ui/Button';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
+import { GAME_CATEGORIES } from '../shared/theme/categoryColors';
+import GameListItem from '../shared/ui/GameListItem';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Games'>;
 
@@ -96,28 +98,23 @@ export default function GamesScreen({ navigation }: Props) {
         </Card>
       ) : null}
 
-      {games.map((game) => (
-        <Pressable
-          key={game.id}
-          onPress={() => openGamePicker(game.id)}
-        >
-          <Card>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', flex: 1 }}>
-                <Text style={{ fontSize: 28 }}>{game.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{game.title}</Text>
-                  <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>{game.subtitle}</Text>
-                  <Text style={[theme.typography.caption, { color: theme.colors.primary, marginTop: 6 }]}>
-                    Dificultad: {difficultyLabel(preferred[game.id])}
-                  </Text>
-                </View>
-              </View>
-              <Text style={{ color: theme.colors.textMuted, fontSize: 22 }}>›</Text>
-            </View>
-          </Card>
-        </Pressable>
-      ))}
+      {games.map((game) => {
+        const catKey = game.category ?? GAME_CATEGORIES[game.id];
+        const category = catKey ?? 'logic';
+
+        return (
+          <GameListItem
+            key={game.id}
+            title={game.title}
+            subtitle={game.subtitle}
+            icon={game.icon}
+            category={category}
+            difficulty={preferred[game.id]}
+            tags={game.tags}
+            onPress={() => openGamePicker(game.id)}
+          />
+        );
+      })}
 
       <DifficultyModal
         visible={modalVisible}

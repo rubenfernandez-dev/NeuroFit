@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, BackHandler, Easing, Text, View, useWindowDimensions } from 'react-native';
+import { Animated, BackHandler, Easing, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../app/routes';
-import { difficultyLabel } from '../games/types';
 import { ensureDailyToday, getDailyProgress } from '../shared/storage/daily';
 import { getGameById } from '../games/registry';
 import Card from '../shared/ui/Card';
@@ -14,16 +13,19 @@ import Screen from '../shared/ui/Screen';
 import PrimaryButton from '../shared/ui/PrimaryButton';
 import Button from '../shared/ui/Button';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
+import { formatDurationMsToSeconds, formatHumanDate } from '../shared/utils/dateFormatter';
+import StreakWidget from '../shared/ui/StreakWidget';
+import DailyChallengeStageCard from '../shared/ui/DailyChallengeStageCard';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyChallenge'>;
 
 function getGameLabel(gameId: string): string {
-  if (gameId === 'mentalmath') return 'Mental Math';
-  if (gameId === 'memory') return 'Memory';
+  if (gameId === 'mentalmath') return 'Cálculo mental';
+  if (gameId === 'memory') return 'Memoria';
   if (gameId === 'sudoku') return 'Sudoku';
-  if (gameId === 'speedmatch') return 'Speed Match';
-  if (gameId === 'patternmemory') return 'Pattern Memory';
-  if (gameId === 'focusgrid') return 'Focus Grid';
+  if (gameId === 'speedmatch') return 'Coincidencia rápida';
+  if (gameId === 'patternmemory') return 'Memoria de patrones';
+  if (gameId === 'focusgrid') return 'Cuadrícula de enfoque';
   return gameId;
 }
 
@@ -168,6 +170,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showFinalConfetti, setShowFinalConfetti] = useState(completion?.kind === 'final');
+  const rewardScale = useRef(new Animated.Value(1)).current;
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
@@ -242,6 +245,14 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   }, [completion?.kind]);
 
   useEffect(() => {
+    if (completion?.kind !== 'final') return;
+    Animated.sequence([
+      Animated.timing(rewardScale, { toValue: 1.12, duration: 260, useNativeDriver: true }),
+      Animated.timing(rewardScale, { toValue: 1, duration: 260, useNativeDriver: true }),
+    ]).start();
+  }, [completion?.kind, rewardScale]);
+
+  useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -262,7 +273,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
     return () => {
       cancelAutoAdvance();
     };
-  }, [cancelAutoAdvance, completion?.kind, daily?.completed, nextStage]);
+  }, [cancelAutoAdvance, completion?.kind, daily?.completed, nextStage, startChallenge, daily]);
 
   useFocusEffect(
     useCallback(() => {
@@ -283,7 +294,6 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
     }, [cancelAutoAdvance, clearCompletion, completion?.kind, navigation]),
   );
 
-  // Root cause fixed: all hooks now run before any conditional return, keeping hook order stable across renders.
   if (!daily) {
     return (
       <Screen scroll={false} contentStyle={{ flex: 1, justifyContent: 'center' }}>
@@ -309,9 +319,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
           <Text style={{ fontSize: 58 }}>✅</Text>
           <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 8 }]}>Etapa completada</Text>
           {nextStageLabel ? (
-            <Text style={[theme.typography.body, { color: theme.colors.textMuted, marginTop: 8 }]}>
-              Siguiente: {nextStageLabel}
-            </Text>
+            <Text style={[theme.typography.body, { color: theme.colors.textMuted, marginTop: 8 }]}>Siguiente: {nextStageLabel}</Text>
           ) : null}
 
           <View style={{ marginTop: 14, flexDirection: 'row', gap: 10 }}>
@@ -321,9 +329,9 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
 
           <View style={{ width: '100%', marginTop: 14 }}>
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>Resultado etapa</Text>
-            <Text style={[theme.typography.body, { color: theme.colors.text, marginTop: 6 }]}>Tiempo: {completion.result?.durationMs ?? '-'} ms</Text>
+            <Text style={[theme.typography.body, { color: theme.colors.text, marginTop: 6 }]}>Tiempo: {formatDurationMsToSeconds(completion.result?.durationMs)}</Text>
             <Text style={[theme.typography.body, { color: theme.colors.text, marginTop: 2 }]}>Errores: {completion.result?.mistakes ?? '-'}</Text>
-            <Text style={[theme.typography.body, { color: theme.colors.text, marginTop: 2 }]}>Score: {completion.result?.score ?? '-'}</Text>
+            <Text style={[theme.typography.body, { color: theme.colors.text, marginTop: 2 }]}>Puntuacion: {completion.result?.score ?? '-'}</Text>
           </View>
 
           <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 10 }]}>
@@ -354,7 +362,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
       <Screen scroll={false} contentStyle={{ flex: 1, justifyContent: 'center' }}>
         <ConfettiSimple enabled={showFinalConfetti} durationMs={1600} particleCount={20} onDone={() => setShowFinalConfetti(false)} />
         <Card variant="primary" style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 58 }}>🎉</Text>
+          <Animated.Text style={{ fontSize: 58, transform: [{ scale: rewardScale }] }}>🎉</Animated.Text>
           <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 8 }]}>Reto diario completado</Text>
           <Text style={[theme.typography.body, { color: theme.colors.textMuted, marginTop: 8 }]}>Has completado el circuito de hoy</Text>
 
@@ -378,54 +386,73 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   return (
     <Screen>
       <Card variant="primary">
-        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Reto de hoy · {daily.lastDailyDateISO}</Text>
-        <Text style={[theme.typography.body, { color: theme.colors.textMuted, marginTop: 8 }]}>
-          Circuito: {progress.completedStages}/{progress.totalStages}
-        </Text>
-        <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>Estado: {daily.status}</Text>
-        <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 8 }]}>🔥 Racha actual: {streakCurrent} días</Text>
-        <View style={{ marginTop: 12 }}>
-          <Pill label={daily.completed ? 'Completado' : 'Pendiente'} tone={daily.completed ? 'success' : 'default'} />
+        <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Reto de hoy · {formatHumanDate(daily.lastDailyDateISO)}</Text>
+
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+          <View style={[styles.metricChip, { backgroundColor: theme.colors.primarySoft }]}>
+            <Text style={[styles.metricValue, { color: theme.colors.primary }]}>{progress.completedStages}/{progress.totalStages}</Text>
+            <Text style={[styles.metricLabel, { color: theme.colors.textMuted }]}>Etapas completadas</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <StreakWidget current={streakCurrent} />
+          </View>
         </View>
+
+        <View style={{ marginTop: 12, flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <Pill label={daily.completed ? 'Completado' : 'Pendiente'} tone={daily.completed ? 'success' : 'warning'} />
+          <Pill label={`Estado: ${daily.status}`} tone={daily.completed ? 'success' : 'warning'} />
+        </View>
+
         <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 10 }]}>
           {daily.completed ? '✅ Reto diario completado. Vuelve mañana para uno nuevo.' : 'Completa las 3 etapas para reclamar la recompensa diaria.'}
         </Text>
-        {daily.completedAtISO ? <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>Completado: {daily.completedAtISO}</Text> : null}
-        {daily.claimedRewardAtISO ? <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>Recompensa reclamada: {daily.claimedRewardAtISO}</Text> : null}
+        {daily.completedAtISO ? <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>Completado: {formatHumanDate(daily.completedAtISO)}</Text> : null}
+        {daily.claimedRewardAtISO ? <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>Recompensa reclamada: {formatHumanDate(daily.claimedRewardAtISO)}</Text> : null}
       </Card>
 
-      <Card>
+      <View style={{ gap: 12 }}>
         {daily.stages.map((stage, index) => {
           const game = getGameById(stage.gameId);
           const isCurrent = index === daily.currentStageIndex && !daily.completed;
+
           return (
-            <View key={`${stage.gameId}-${index}`} style={{ marginBottom: 10, paddingBottom: 10, borderBottomWidth: index < daily.stages.length - 1 ? 1 : 0, borderColor: theme.colors.border }}>
-              <Text style={[theme.typography.body, { color: theme.colors.text }]}>
-                Etapa {index + 1}: {game?.title ?? stage.gameId}
-              </Text>
-              <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}>
-                Dificultad: {difficultyLabel(stage.difficulty)}
-              </Text>
-              {stage.result ? (
-                <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 4 }]}> 
-                  Resultado · score: {stage.result.score ?? '-'} · tiempo: {stage.result.durationMs ?? '-'}ms · fallos: {stage.result.mistakes ?? '-'}
-                </Text>
-              ) : null}
-              <View style={{ marginTop: 6, flexDirection: 'row', gap: 8 }}>
-                <Pill label={stage.completed ? '✅ Completado' : isCurrent ? '▶ Actual' : '⏳ Pendiente'} tone={stage.completed ? 'success' : isCurrent ? 'cyan' : 'default'} />
-              </View>
-            </View>
+            <DailyChallengeStageCard
+              key={`${stage.gameId}-${index}`}
+              stage={stage}
+              index={index}
+              title={game?.title ?? stage.gameId}
+              isCurrent={isCurrent}
+            />
           );
         })}
-      </Card>
+      </View>
 
       <PrimaryButton
         title={daily.completed ? '✅ Reto diario completado' : progress.completedStages === 0 ? 'Iniciar reto diario' : 'Continuar reto diario'}
         onPress={startChallenge}
         disabled={daily.completed}
-        style={{ minHeight: 56, borderRadius: 18 }}
       />
       {daily.completed ? <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, textAlign: 'center' }]}>Vuelve mañana para un nuevo reto</Text> : null}
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  metricChip: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minHeight: 66,
+    justifyContent: 'center',
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  metricLabel: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+});

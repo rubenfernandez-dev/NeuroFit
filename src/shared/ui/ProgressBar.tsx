@@ -1,23 +1,14 @@
 import React from 'react';
-import { Text, View } from 'react-native';
-import { useAppTheme } from '../theme/theme';
+import type { CognitiveCategory } from '../theme/categoryColors';
+import AnimatedProgressBar from './AnimatedProgressBar';
 
 type ProgressBarProps = {
   value: number;
   label?: string;
   color?: string;
+  category?: CognitiveCategory;
 };
 
-export default function ProgressBar({ value, label, color }: ProgressBarProps) {
-  const { theme } = useAppTheme();
-  const percentage = Math.max(0, Math.min(100, Math.round(value * 100)));
-
-  return (
-    <View style={{ gap: 6 }}>
-      {label ? <Text style={[theme.typography.caption, { color: theme.colors.muted }]}>{label}</Text> : null}
-      <View style={{ height: 10, borderRadius: 999, overflow: 'hidden', backgroundColor: theme.colors.border }}>
-        <View style={{ height: '100%', width: `${percentage}%`, backgroundColor: color ?? theme.colors.primary, borderRadius: 999 }} />
-      </View>
-    </View>
-  );
+export default function ProgressBar({ value, label, color, category }: ProgressBarProps) {
+  return <AnimatedProgressBar value={value} label={label} color={color} category={category} />;
 }

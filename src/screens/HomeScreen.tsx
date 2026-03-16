@@ -16,11 +16,15 @@ import ProgressBar from '../shared/ui/ProgressBar';
 import { ensureDailyToday, getDailyProgress } from '../shared/storage/daily';
 import { generateWeeklyLeaderboard } from '../shared/leaderboard/leaderboard';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
+import { getCategoryColors } from '../shared/theme/categoryColors';
+import StreakWidget from '../shared/ui/StreakWidget';
+import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
 export default function HomeScreen({ navigation }: Props) {
   const { theme } = useAppTheme();
+  const categoryColors = getCategoryColors(theme.mode);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [xpTotal, setXpTotal] = useState(0);
@@ -95,6 +99,23 @@ export default function HomeScreen({ navigation }: Props) {
   const progress = nextLevel
     ? (xpTotal - level.minXp) / Math.max(1, nextLevel.minXp - level.minXp)
     : 1;
+  const leagueAccent =
+    leagueId === 'bronze'
+      ? '#CD7F32'
+      : leagueId === 'silver'
+        ? '#94A3B8'
+        : leagueId === 'gold'
+          ? '#F59E0B'
+          : leagueId === 'platinum'
+            ? '#06B6D4'
+            : leagueId === 'diamond'
+              ? '#60A5FA'
+              : leagueId === 'master'
+                ? '#EC4899'
+                : leagueId === 'grand_master'
+                  ? '#F97316'
+                  : '#A78BFA';
+  const top10Progress = spToTop10 > 0 ? Math.max(0, Math.min(1, seasonPoints / (seasonPoints + spToTop10))) : 1;
 
   const closeWeeklyResult = async () => {
     if (!weeklyResult) return;
@@ -111,12 +132,12 @@ export default function HomeScreen({ navigation }: Props) {
 
   const metrics = useMemo(
     () => [
-      { key: 'speed', title: '⚡ Velocidad mental', value: neuroScore.speed, color: theme.colors.orange },
-      { key: 'memory', title: '🧠 Memoria', value: neuroScore.memory, color: theme.colors.pink },
-      { key: 'logic', title: '🧩 Lógica', value: neuroScore.logic, color: theme.colors.primary },
-      { key: 'attention', title: '🎯 Atención', value: neuroScore.attention, color: theme.colors.cyan },
+      { key: 'speed', title: '⚡ Velocidad mental', value: neuroScore.speed, color: categoryColors.speed },
+      { key: 'memory', title: '🧠 Memoria', value: neuroScore.memory, color: categoryColors.memory },
+      { key: 'logic', title: '🧩 Lógica', value: neuroScore.logic, color: categoryColors.logic },
+      { key: 'attention', title: '🎯 Atención', value: neuroScore.attention, color: categoryColors.attention },
     ],
-    [neuroScore, theme.colors],
+    [categoryColors, neuroScore],
   );
 
   return (
@@ -132,7 +153,7 @@ export default function HomeScreen({ navigation }: Props) {
             </View>
           </Card>
         ) : null}
-        <Pill label={`🔥 Racha ${streakCurrent} · Mejor ${streakBest}`} tone="warning" />
+        <StreakWidget current={streakCurrent} best={streakBest} />
 
         <Card variant="primary">
           <Text style={[theme.typography.h2, { color: theme.colors.text }]}>NeuroScore</Text>
@@ -171,37 +192,48 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </Card>
 
-        <Card variant="warning">
+        <Card
+          style={{
+            borderColor: `${leagueAccent}66`,
+            backgroundColor: theme.mode === 'dark' ? theme.colors.bg1 : `${leagueAccent}11`,
+          }}
+        >
           <Text style={[theme.typography.h3, { color: theme.colors.text }]}>🏆 Liga semanal</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             <Pill label={`${league.badgeEmoji} ${league.name}`} tone="default" />
             <Pill label={`${seasonPoints} SP`} tone="cyan" />
             <Pill label={`Puesto #${userRank}`} tone={userRank <= 10 ? 'success' : userRank >= 41 ? 'danger' : 'default'} />
           </View>
+          <View style={{ marginTop: 10 }}>
+            <AnimatedProgressBar
+              value={top10Progress}
+              color={leagueAccent}
+              label={spToTop10 > 0 ? `Te faltan ${spToTop10} SP para Top 10` : '¡Estás en zona de ascenso!'}
+              height={10}
+              durationMs={520}
+            />
+          </View>
           <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 10 }]}>Top 10 ascienden • Últimos 10 descienden</Text>
-          {userRank > 10 ? (
-            <Text style={[theme.typography.bodySmall, { color: theme.colors.orange, marginTop: 6 }]}>Te faltan {spToTop10} SP para Top 10</Text>
-          ) : null}
           {userRank >= 41 ? (
             <Text style={[theme.typography.bodySmall, { color: theme.colors.red, marginTop: 4 }]}>Te faltan {spToSafety} SP para salir de descenso</Text>
           ) : null}
         </Card>
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Pressable onPress={() => navigation.navigate('Leaderboard')} style={{ flex: 1 }}>
-            <Card>
+          <Pressable onPress={() => navigation.navigate('Leaderboard')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+            <Card style={{ paddingVertical: 14 }}>
               <Text style={{ fontSize: 20 }}>🥇</Text>
               <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Ranking local</Text>
             </Card>
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('Progress')} style={{ flex: 1 }}>
-            <Card>
+          <Pressable onPress={() => navigation.navigate('Progress')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+            <Card style={{ paddingVertical: 14 }}>
               <Text style={{ fontSize: 20 }}>📈</Text>
               <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Progreso</Text>
             </Card>
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('Settings')} style={{ flex: 1 }}>
-            <Card>
+          <Pressable onPress={() => navigation.navigate('Settings')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+            <Card style={{ paddingVertical: 14 }}>
               <Text style={{ fontSize: 20 }}>⚙️</Text>
               <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Ajustes</Text>
             </Card>
@@ -245,7 +277,7 @@ export default function HomeScreen({ navigation }: Props) {
               Puesto final: {weeklyResult?.finalRank ?? '-'} / 50
             </Text>
             <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-              SP semana: {weeklyResult?.spFinal ?? 0}
+              SP de la semana: {weeklyResult?.spFinal ?? 0}
             </Text>
             <View style={{ marginTop: 12 }}>
               <Button title="Continuar" onPress={closeWeeklyResult} />
