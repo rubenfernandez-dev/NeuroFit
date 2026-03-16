@@ -13,9 +13,9 @@ type FocusStopOptions = {
 
 const SOURCES: Record<Exclude<FocusAudioMode, 'silencio'>, number> = {
   suave: require('../../../assets/focus/soft.wav'),
-  profundo: require('../../../assets/focus/deep.wav'),
-  lluvia: require('../../../assets/focus/rain.wav'),
-  naturaleza: require('../../../assets/focus/nature.wav'),
+  profundo: require('../../../assets/focus/deep.mp3'),
+  lluvia: require('../../../assets/focus/rain.mp3'),
+  naturaleza: require('../../../assets/focus/nature.mp3'),
 };
 
 const TARGET_VOLUME: Record<Exclude<FocusAudioMode, 'silencio'>, number> = {

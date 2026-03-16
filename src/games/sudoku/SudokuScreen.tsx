@@ -25,7 +25,21 @@ import GameResultModal from '../../shared/feedback/GameResultModal';
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
 const ERROR_FLASH_MS = 800;
+const UNIT_COMPLETION_PULSE_MS = 1400;
+const UNIT_COMPLETION_BLINK_MS = 180;
 const SUDOKU_DIFFICULTIES: Difficulty[] = ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'];
+
+type UnitCompletionPulse = {
+  rows: number[];
+  cols: number[];
+  boxes: number[];
+};
+
+const EMPTY_UNIT_COMPLETION_PULSE: UnitCompletionPulse = {
+  rows: [],
+  cols: [],
+  boxes: [],
+};
 
 type VictorySummary = {
   earnedXp: number;
@@ -64,6 +78,9 @@ export default function SudokuScreen({ route, navigation }: Props) {
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
   const [headerHeight, setHeaderHeight] = useState(92);
   const [controlsHeight, setControlsHeight] = useState(250);
+  const [completionPulse, setCompletionPulse] = useState<UnitCompletionPulse>(EMPTY_UNIT_COMPLETION_PULSE);
+  const [completionPulseVisible, setCompletionPulseVisible] = useState(false);
+  const [completionPulseRunKey, setCompletionPulseRunKey] = useState(0);
 
   const selectedRow = Math.floor(selectedIndex / 9);
   const selectedCol = selectedIndex % 9;
@@ -78,6 +95,55 @@ export default function SudokuScreen({ route, navigation }: Props) {
   const flattenGrid = (rows: number[][]) => rows.flat();
   const cloneGrid = (rows: number[][]) => rows.map((row) => [...row]);
   const cloneNotes = (matrix: number[][][]) => matrix.map((row) => row.map((cell) => [...cell]));
+
+  const isRowComplete = (rows: number[][], row: number) => {
+    const values = rows[row];
+    if (!values || values.some((value) => value === 0)) return false;
+    return new Set(values).size === 9;
+  };
+
+  const isColComplete = (rows: number[][], col: number) => {
+    const values = Array.from({ length: 9 }, (_, row) => rows[row]?.[col] ?? 0);
+    if (values.some((value) => value === 0)) return false;
+    return new Set(values).size === 9;
+  };
+
+  const isBoxComplete = (rows: number[][], box: number) => {
+    const boxRow = Math.floor(box / 3) * 3;
+    const boxCol = (box % 3) * 3;
+    const values: number[] = [];
+
+    for (let row = boxRow; row < boxRow + 3; row += 1) {
+      for (let col = boxCol; col < boxCol + 3; col += 1) {
+        values.push(rows[row]?.[col] ?? 0);
+      }
+    }
+
+    if (values.some((value) => value === 0)) return false;
+    return new Set(values).size === 9;
+  };
+
+  const triggerCompletionPulse = (next: UnitCompletionPulse) => {
+    if (next.rows.length === 0 && next.cols.length === 0 && next.boxes.length === 0) return;
+
+    setCompletionPulse((prev) => ({
+      rows: Array.from(new Set([...prev.rows, ...next.rows])),
+      cols: Array.from(new Set([...prev.cols, ...next.cols])),
+      boxes: Array.from(new Set([...prev.boxes, ...next.boxes])),
+    }));
+    setCompletionPulseRunKey((prev) => prev + 1);
+  };
+
+  const completedDigits = useMemo(() => {
+    const counts = Array.from({ length: 10 }, () => 0);
+    flattenGrid(grid).forEach((value) => {
+      if (value >= 1 && value <= 9) {
+        counts[value] += 1;
+      }
+    });
+
+    return Array.from({ length: 9 }, (_, index) => index + 1).filter((value) => counts[value] >= 9);
+  }, [grid]);
 
   useEffect(() => {
     const nextDifficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
@@ -160,6 +226,8 @@ export default function SudokuScreen({ route, navigation }: Props) {
       setVictoryVisible(false);
       setVictorySummary(null);
       setShowErrors(false);
+      setCompletionPulse(EMPTY_UNIT_COMPLETION_PULSE);
+      setCompletionPulseVisible(false);
       await trackSessionStart({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal' });
     };
 
@@ -184,6 +252,27 @@ export default function SudokuScreen({ route, navigation }: Props) {
     }, ERROR_FLASH_MS);
     return () => clearTimeout(timeout);
   }, [lastErrorCell]);
+
+  useEffect(() => {
+    if (completionPulseRunKey === 0) return;
+
+    setCompletionPulseVisible(true);
+
+    const blink = setInterval(() => {
+      setCompletionPulseVisible((prev) => !prev);
+    }, UNIT_COMPLETION_BLINK_MS);
+
+    const done = setTimeout(() => {
+      clearInterval(blink);
+      setCompletionPulseVisible(false);
+      setCompletionPulse(EMPTY_UNIT_COMPLETION_PULSE);
+    }, UNIT_COMPLETION_PULSE_MS);
+
+    return () => {
+      clearInterval(blink);
+      clearTimeout(done);
+    };
+  }, [completionPulseRunKey]);
 
   // Ref keeps the full save payload current on every render — the unmount cleanup
   // and the periodic checkpoint always write the latest state (including elapsedMs).
@@ -327,6 +416,13 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setShowErrors(false);
 
     if (value !== 0 && !wrongInput) {
+      const box = Math.floor(selectedRow / 3) * 3 + Math.floor(selectedCol / 3);
+      const pulse: UnitCompletionPulse = {
+        rows: isRowComplete(nextGrid, selectedRow) && !isRowComplete(grid, selectedRow) ? [selectedRow] : [],
+        cols: isColComplete(nextGrid, selectedCol) && !isColComplete(grid, selectedCol) ? [selectedCol] : [],
+        boxes: isBoxComplete(nextGrid, box) && !isBoxComplete(grid, box) ? [box] : [],
+      };
+      triggerCompletionPulse(pulse);
       void playSuccessFeedback();
     }
     if (wrongInput) {
@@ -388,6 +484,8 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setVictoryVisible(false);
     setVictorySummary(null);
     setShowErrors(false);
+    setCompletionPulse(EMPTY_UNIT_COMPLETION_PULSE);
+    setCompletionPulseVisible(false);
     trackSessionStart({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal' });
   };
 
@@ -473,6 +571,10 @@ export default function SudokuScreen({ route, navigation }: Props) {
               selectedIndex={selectedIndex}
               conflicts={conflicts}
               errorCell={lastErrorCell}
+              completionPulseRows={completionPulse.rows}
+              completionPulseCols={completionPulse.cols}
+              completionPulseBoxes={completionPulse.boxes}
+              completionPulseVisible={completionPulseVisible}
               locked={gameOver || didWin}
               onSelect={setSelectedIndex}
             />
@@ -493,6 +595,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
               buttonSize={keypadButtonSize}
               gap={compactLayout ? 4 : 6}
               showClear={false}
+              hiddenValues={completedDigits}
             />
 
           <View style={{ flexDirection: 'row', gap: controlsGap, marginTop: controlsGap }}>

@@ -13,16 +13,37 @@ type SudokuGridProps = {
   selectedIndex: number;
   conflicts: Set<number>;
   errorCell: SudokuCellPosition | null;
+  completionPulseRows?: number[];
+  completionPulseCols?: number[];
+  completionPulseBoxes?: number[];
+  completionPulseVisible?: boolean;
   locked: boolean;
   onSelect: (index: number) => void;
 };
 
-export default function SudokuGrid({ size, grid, notes, givens, selectedIndex, conflicts, errorCell, locked, onSelect }: SudokuGridProps) {
+export default function SudokuGrid({
+  size,
+  grid,
+  notes,
+  givens,
+  selectedIndex,
+  conflicts,
+  errorCell,
+  completionPulseRows = [],
+  completionPulseCols = [],
+  completionPulseBoxes = [],
+  completionPulseVisible = false,
+  locked,
+  onSelect,
+}: SudokuGridProps) {
   const { theme } = useAppTheme();
   const cellSize = size / 9;
   const selectedRow = Math.floor(selectedIndex / 9);
   const selectedCol = selectedIndex % 9;
   const selectedValue = grid[selectedRow]?.[selectedCol] ?? 0;
+  const pulseRows = new Set(completionPulseRows);
+  const pulseCols = new Set(completionPulseCols);
+  const pulseBoxes = new Set(completionPulseBoxes);
 
   return (
     <View style={{ width: size, height: size, borderWidth: 2, borderColor: theme.colors.border, alignSelf: 'center' }}>
@@ -38,6 +59,8 @@ export default function SudokuGrid({ size, grid, notes, givens, selectedIndex, c
               cellValue: grid[row][col],
             });
             const isError = !!errorCell && errorCell.row === row && errorCell.col === col;
+            const boxIndex = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+            const completionPulse = completionPulseVisible && (pulseRows.has(row) || pulseCols.has(col) || pulseBoxes.has(boxIndex));
 
             return (
               <View
@@ -59,6 +82,7 @@ export default function SudokuGrid({ size, grid, notes, givens, selectedIndex, c
                   inLineHighlight={highlight.rowOrCol}
                   inBoxHighlight={highlight.box}
                   valueMatchHighlight={highlight.valueMatch}
+                  completionPulse={completionPulse}
                   onPress={() => {
                     if (!locked) {
                       onSelect(index);

@@ -14,6 +14,7 @@ type SudokuCellProps = {
   inLineHighlight: boolean;
   inBoxHighlight: boolean;
   valueMatchHighlight: boolean;
+  completionPulse: boolean;
   onPress: () => void;
 };
 
@@ -28,6 +29,7 @@ export default function SudokuCell({
   inLineHighlight,
   inBoxHighlight,
   valueMatchHighlight,
+  completionPulse,
   onPress,
 }: SudokuCellProps) {
   const { theme } = useAppTheme();
@@ -43,6 +45,7 @@ export default function SudokuCell({
       rowOrCol: inLineHighlight,
       box: inBoxHighlight,
       valueMatch: valueMatchHighlight,
+      completionPulse,
     },
     error,
   );

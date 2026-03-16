@@ -1,6 +1,7 @@
 import React from 'react';
-import { View } from 'react-native';
+import { Text, View } from 'react-native';
 import Button from '../../../shared/ui/Button';
+import { useAppTheme } from '../../../shared/theme/theme';
 
 type KeypadProps = {
   onInput: (value: number) => void;
@@ -11,6 +12,7 @@ type KeypadProps = {
   buttonSize?: number;
   gap?: number;
   showClear?: boolean;
+  hiddenValues?: number[];
 };
 
 export default function Keypad({
@@ -22,14 +24,18 @@ export default function Keypad({
   buttonSize = 52,
   gap = 8,
   showClear = true,
+  hiddenValues = [],
 }: KeypadProps) {
+  const { theme } = useAppTheme();
   const values = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const hiddenSet = new Set(hiddenValues);
+  const visibleValues = values.filter((value) => !hiddenSet.has(value));
   const targetHeight = Math.max(compact ? 34 : 40, buttonSize - 10);
 
   return (
     <View style={{ gap, flexShrink: 0 }}>
       <View style={{ flexDirection: 'row', gap, justifyContent: 'space-between' }}>
-        {values.map((value) => (
+        {visibleValues.map((value) => (
           <Button
             key={value}
             title={String(value)}
@@ -46,6 +52,10 @@ export default function Keypad({
           />
         ))}
       </View>
+
+      {visibleValues.length === 0 ? (
+        <Text style={{ color: theme.colors.success, textAlign: 'center', fontWeight: '700' }}>Numeros 1-9 completados</Text>
+      ) : null}
 
       {showClear ? (
         <Button
