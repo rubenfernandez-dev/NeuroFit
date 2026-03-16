@@ -595,7 +595,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
               buttonSize={keypadButtonSize}
               gap={compactLayout ? 4 : 6}
               showClear={false}
-              hiddenValues={completedDigits}
+              completedValues={completedDigits}
             />
 
           <View style={{ flexDirection: 'row', gap: controlsGap, marginTop: controlsGap }}>

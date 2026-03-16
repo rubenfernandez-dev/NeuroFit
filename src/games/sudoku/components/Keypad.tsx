@@ -12,7 +12,7 @@ type KeypadProps = {
   buttonSize?: number;
   gap?: number;
   showClear?: boolean;
-  hiddenValues?: number[];
+  completedValues?: number[];
 };
 
 export default function Keypad({
@@ -24,38 +24,51 @@ export default function Keypad({
   buttonSize = 52,
   gap = 8,
   showClear = true,
-  hiddenValues = [],
+  completedValues = [],
 }: KeypadProps) {
   const { theme } = useAppTheme();
   const values = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-  const hiddenSet = new Set(hiddenValues);
-  const visibleValues = values.filter((value) => !hiddenSet.has(value));
+  const completedSet = new Set(completedValues);
   const targetHeight = Math.max(compact ? 34 : 40, buttonSize - 10);
 
   return (
     <View style={{ gap, flexShrink: 0 }}>
       <View style={{ flexDirection: 'row', gap, justifyContent: 'space-between' }}>
-        {visibleValues.map((value) => (
-          <Button
-            key={value}
-            title={String(value)}
-            onPress={() => onInput(value)}
-            disabled={disabled}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              minHeight: targetHeight,
-              borderRadius: 12,
-              paddingHorizontal: 0,
-              paddingVertical: 0,
-            }}
-          />
+        {values.map((value) => (
+          <View key={value} style={{ flex: 1, minWidth: 0 }}>
+            <Button
+              title={String(value)}
+              onPress={() => onInput(value)}
+              disabled={disabled}
+              style={{
+                minHeight: targetHeight,
+                borderRadius: 12,
+                paddingHorizontal: 0,
+                paddingVertical: 0,
+              }}
+            />
+
+            {completedSet.has(value) ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -2,
+                  width: 18,
+                  height: 18,
+                  borderRadius: 9,
+                  backgroundColor: theme.colors.success,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800', lineHeight: 14 }}>✓</Text>
+              </View>
+            ) : null}
+          </View>
         ))}
       </View>
-
-      {visibleValues.length === 0 ? (
-        <Text style={{ color: theme.colors.success, textAlign: 'center', fontWeight: '700' }}>Numeros 1-9 completados</Text>
-      ) : null}
 
       {showClear ? (
         <Button

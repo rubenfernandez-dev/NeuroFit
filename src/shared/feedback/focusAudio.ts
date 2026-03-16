@@ -30,6 +30,7 @@ let mode: FocusAudioMode = 'silencio';
 let player: ReturnType<typeof createAudioPlayer> | null = null;
 let activeSource: Exclude<FocusAudioMode, 'silencio'> | null = null;
 let fadeInterval: ReturnType<typeof setInterval> | null = null;
+let playbackStatusSubscription: { remove: () => void } | null = null;
 let operationId = 0;
 let playing = false;
 
@@ -82,12 +83,27 @@ function ensurePlayer(nextSource: Exclude<FocusAudioMode, 'silencio'>) {
       keepAudioSessionActive: true,
     });
     player.loop = true;
+    playbackStatusSubscription = player.addListener('playbackStatusUpdate', (status) => {
+      if (mode === 'silencio' || !playing) return;
+      if (status.didJustFinish) {
+        try {
+          player?.seekTo(0).then(() => {
+            if (mode !== 'silencio' && playing) {
+              player?.play();
+            }
+          });
+        } catch {
+          player?.play();
+        }
+      }
+    });
     activeSource = nextSource;
     return;
   }
 
   if (activeSource !== nextSource) {
     player.replace(SOURCES[nextSource]);
+    player.loop = true;
     activeSource = nextSource;
   }
 }
@@ -171,6 +187,8 @@ export function disposeFocusAmbient() {
 
   if (!player) return;
 
+  playbackStatusSubscription?.remove();
+  playbackStatusSubscription = null;
   player.pause();
   player.remove();
   player = null;
