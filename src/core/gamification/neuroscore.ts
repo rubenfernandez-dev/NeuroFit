@@ -1,3 +1,4 @@
+import { computePerformanceFromScore } from './economy';
 import { Difficulty, GameId } from '../../games/types';
 import { NeuroMetrics, Profile, getProfile, updateProfile } from '../../shared/storage/profile';
 import { nowISO } from '../../shared/utils/time';
@@ -32,6 +33,7 @@ const WEIGHTS_BY_GAME: Partial<Record<GameId, NeuroWeights>> = {
   speedmatch: { speed: 0.6, memory: 0, logic: 0, attention: 0.4 },
   patternmemory: { speed: 0, memory: 0.7, logic: 0, attention: 0.3 },
   focusgrid: { speed: 0.3, memory: 0, logic: 0.2, attention: 0.5 },
+  numbermatch: { speed: 0, memory: 0, logic: 0.65, attention: 0.35 },
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -81,6 +83,12 @@ function computePerformanceNormalized(input: NeuroScoreInput): number {
     const timeFactor = mapTimeFactor(input.durationMs, 30_000, 80_000);
     const penalty = clamp(mistakes / 20, 0, 1) * 0.2;
     return clamp(scoreNormalized * 0.8 + timeFactor * 0.2 - penalty, 0, 1);
+  }
+
+  if (input.gameId === 'numbermatch') {
+    const safeScore = clamp(input.score ?? 0, 0, 100);
+    const safeDifficulty = input.difficulty ?? 'avanzado';
+    return computePerformanceFromScore(safeScore, safeDifficulty);
   }
 
   const correct = Math.max(0, input.score ?? 0);

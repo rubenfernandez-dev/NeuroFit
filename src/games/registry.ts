@@ -67,6 +67,17 @@ export const GAMES: GameDefinition[] = [
     category: 'attention',
     tags: ['Reto'],
   },
+  {
+    id: 'numbermatch',
+    title: 'Number Match',
+    subtitle: 'Empareja números iguales o que sumen 10',
+    icon: '🔢',
+    routeName: 'NumberMatch',
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
+    enabled: true,
+    category: 'logic',
+    tags: ['Nuevo'],
+  },
 ];
 
 export function enabledGames() {

@@ -70,6 +70,7 @@ export type RootStackParamList = {
   SpeedMatch: GameRouteParams | undefined;
   PatternMemory: GameRouteParams | undefined;
   FocusGrid: GameRouteParams | undefined;
+  NumberMatch: GameRouteParams | undefined;
 };
 
 export type GameStackRouteName = (typeof GAMES)[number]['routeName'];

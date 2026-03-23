@@ -9,6 +9,7 @@ import { MentalMathScreen } from '../games/mentalmath';
 import { SpeedMatchScreen } from '../games/speedmatch';
 import { PatternMemoryScreen } from '../games/patternmemory';
 import { FocusGridScreen } from '../games/focusgrid';
+import { NumberMatchScreen } from '../games/numbermatch';
 import { useAppTheme } from '../shared/theme/theme';
 import { startFocusAmbient, stopFocusAmbient } from '../shared/feedback/focusAudio';
 
@@ -95,6 +96,7 @@ export default function AppNavigator() {
         <Stack.Screen name="SpeedMatch" component={SpeedMatchScreen} options={{ title: 'Coincidencia rápida' }} />
         <Stack.Screen name="PatternMemory" component={PatternMemoryScreen} options={{ title: 'Memoria de patrones' }} />
         <Stack.Screen name="FocusGrid" component={FocusGridScreen} options={{ title: 'Cuadrícula de enfoque' }} />
+        <Stack.Screen name="NumberMatch" component={NumberMatchScreen} options={{ title: 'Number Match' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

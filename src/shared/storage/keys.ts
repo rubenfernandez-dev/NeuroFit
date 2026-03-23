@@ -14,6 +14,7 @@ export const STORAGE_KEYS = {
   speedMatchState: 'neurofit.speedmatch.state',
   patternMemoryState: 'neurofit.patternmemory.state',
   focusGridState: 'neurofit.focusgrid.state',
+  numberMatchState: 'neurofit.numbermatch.state',
   dailyUserSeed: 'neurofit.daily.userSeed',
   lastDailyCircuit: 'neurofit.daily.lastCircuit',
 } as const;

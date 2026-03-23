@@ -32,6 +32,7 @@ export const GAME_CATEGORIES: Record<string, CognitiveCategory> = {
   speedmatch: 'speed',
   patternmemory: 'memory',
   focusgrid: 'attention',
+  numbermatch: 'logic',
 };
 
 export const DIFFICULTY_COLORS_LIGHT: Record<string, string> = {

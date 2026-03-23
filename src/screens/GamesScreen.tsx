@@ -27,6 +27,7 @@ export default function GamesScreen({ navigation }: Props) {
     speedmatch: 'avanzado',
     patternmemory: 'avanzado',
     focusgrid: 'avanzado',
+    numbermatch: 'avanzado',
   });
   const [modalVisible, setModalVisible] = React.useState(false);
   const [selectedGameId, setSelectedGameId] = React.useState<GameId | null>(null);

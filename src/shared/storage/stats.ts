@@ -19,6 +19,9 @@ export type GameStats = {
   sudokuCompleted?: number;
   sudokuTotalTimeMs?: number;
   sudokuTotalMistakes?: number;
+  bestCombo?: number;
+  totalValidMatches?: number;
+  avgBoardClearedPercent?: number;
 };
 
 export type StatsStore = Partial<Record<GameId, GameStats>>;
@@ -73,7 +76,18 @@ type FocusGridOutcome = {
   completed?: boolean;
 };
 
-const GAME_IDS: GameId[] = ['sudoku', 'memory', 'mentalmath', 'speedmatch', 'patternmemory', 'focusgrid'];
+type NumberMatchOutcome = {
+  gameId: 'numbermatch';
+  score: number;
+  validMatches: number;
+  invalidMatches: number;
+  bestCombo: number;
+  boardClearedPercent: number;
+  durationMs?: number;
+  won?: boolean;
+};
+
+const GAME_IDS: GameId[] = ['sudoku', 'memory', 'mentalmath', 'speedmatch', 'patternmemory', 'focusgrid', 'numbermatch'];
 
 function normalizeBestTimeByDifficulty(
   input: Partial<Record<Difficulty, number>> | undefined,
@@ -318,6 +332,50 @@ export async function trackFocusGridResult(input: FocusGridOutcome): Promise<Gam
   }
 
   all.focusgrid = next;
+  await setItem(STORAGE_KEYS.stats, JSON.stringify(all));
+  return next;
+}
+
+export async function trackNumberMatchResult(input: NumberMatchOutcome): Promise<GameStats> {
+  const all = await getAllStats();
+  const current = normalizeStatsEntry(all.numbermatch);
+  const safeScore = Math.max(0, Math.min(100, Math.floor(input.score)));
+  const safeValidMatches = Math.max(0, Math.floor(input.validMatches));
+  const safeInvalidMatches = Math.max(0, Math.floor(input.invalidMatches));
+  const safeBestCombo = Math.max(0, Math.floor(input.bestCombo));
+  const safeBoardCleared = Math.max(0, Math.min(100, Math.round(input.boardClearedPercent)));
+  const safeDuration = typeof input.durationMs === 'number' ? Math.max(0, Math.floor(input.durationMs)) : undefined;
+
+  const nextPlays = (current.plays ?? current.sessions ?? 0) + 1;
+  const prevAvgScore = current.avgScore ?? 0;
+  const prevAvgBoard = current.avgBoardClearedPercent ?? 0;
+  const nextAvgScore = nextPlays <= 1 ? safeScore : Math.round((prevAvgScore * (nextPlays - 1) + safeScore) / nextPlays);
+  const nextAvgBoard =
+    nextPlays <= 1
+      ? safeBoardCleared
+      : Math.round(((prevAvgBoard * (nextPlays - 1) + safeBoardCleared) / nextPlays) * 100) / 100;
+
+  const next: GameStats = {
+    ...current,
+    plays: nextPlays,
+    wins: (current.wins ?? 0) + (input.won ? 1 : 0),
+    lastPlayedISO: nowISO(),
+    bestScore: Math.max(current.bestScore ?? safeScore, safeScore),
+    avgScore: Math.max(0, Math.min(100, nextAvgScore)),
+    bestCombo: Math.max(current.bestCombo ?? safeBestCombo, safeBestCombo),
+    totalValidMatches: (current.totalValidMatches ?? 0) + safeValidMatches,
+    avgBoardClearedPercent: Math.max(0, Math.min(100, nextAvgBoard)),
+    avgMistakes:
+      nextPlays <= 1
+        ? safeInvalidMatches
+        : Math.round((((current.avgMistakes ?? 0) * (nextPlays - 1) + safeInvalidMatches) / nextPlays) * 100) / 100,
+  };
+
+  if (typeof safeDuration === 'number' && input.won) {
+    next.bestTimeMs = Math.min(current.bestTimeMs ?? safeDuration, safeDuration);
+  }
+
+  all.numbermatch = next;
   await setItem(STORAGE_KEYS.stats, JSON.stringify(all));
   return next;
 }

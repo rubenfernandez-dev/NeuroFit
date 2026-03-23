@@ -286,6 +286,7 @@ export default function SettingsScreen() {
       deleteItem(STORAGE_KEYS.mentalMathState),
       deleteItem(STORAGE_KEYS.patternMemoryState),
       deleteItem(STORAGE_KEYS.focusGridState),
+      deleteItem(STORAGE_KEYS.numberMatchState),
       deleteItem(STORAGE_KEYS.leaderboard),
     ]);
   };

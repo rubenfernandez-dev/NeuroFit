@@ -28,6 +28,7 @@ function makeProfile(overrides: Partial<Profile> = {}): Profile {
       speedmatch: 'avanzado',
       patternmemory: 'avanzado',
       focusgrid: 'avanzado',
+      numbermatch: 'avanzado',
     },
     neuro: {
       speed: 50,
