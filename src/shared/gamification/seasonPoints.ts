@@ -2,6 +2,7 @@ import { Difficulty, GameId } from '../../games/types';
 import { getLeagueById, League } from './leagues';
 import { ensureSeasonCurrent, getProfile, updateProfile } from '../storage/profile';
 import { computeSp } from '../../core/gamification/economy';
+import { logEvent } from '../../core/telemetry';
 
 type CalcSeasonPointsInput = {
   gameId: GameId;
@@ -45,6 +46,8 @@ export async function grantSeasonPoints(input: CalcSeasonPointsInput): Promise<{
   const updated = await updateProfile({
     seasonPoints: nextSeasonPoints,
   });
+
+  logEvent('sp_granted', { gameId: input.gameId, difficulty: input.difficulty, isDaily: input.isDaily, earnedSeasonPoints, seasonPoints: updated.seasonPoints });
 
   return {
     earnedSeasonPoints,

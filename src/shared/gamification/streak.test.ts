@@ -40,29 +40,35 @@ describe('streak logic', () => {
   });
 
   it('starts streak at 1 on first daily completion', () => {
-    const next = applyDailyCompletionToStreak(makeProfile(), '2026-03-12');
-    expect(next.streakCurrent).toBe(1);
-    expect(next.streakBest).toBe(1);
-    expect(next.lastDailyCompletedISO).toBe('2026-03-12');
+    const result = applyDailyCompletionToStreak(makeProfile(), '2026-03-12');
+    expect(result.profile.streakCurrent).toBe(1);
+    expect(result.profile.streakBest).toBe(1);
+    expect(result.profile.lastDailyCompletedISO).toBe('2026-03-12');
+    expect(result.incremented).toBe(true);
+    expect(result.reason).toBe('first_streak');
   });
 
   it('increments streak on consecutive local days', () => {
-    const next = applyDailyCompletionToStreak(
+    const result = applyDailyCompletionToStreak(
       makeProfile({ streakCurrent: 4, streakBest: 7, lastDailyCompletedISO: '2026-03-11' }),
       '2026-03-12',
     );
 
-    expect(next.streakCurrent).toBe(5);
-    expect(next.streakBest).toBe(7);
+    expect(result.profile.streakCurrent).toBe(5);
+    expect(result.profile.streakBest).toBe(7);
+    expect(result.incremented).toBe(true);
+    expect(result.reason).toBe('consecutive_day');
   });
 
   it('resets streak after a skipped day', () => {
-    const next = applyDailyCompletionToStreak(
+    const result = applyDailyCompletionToStreak(
       makeProfile({ streakCurrent: 4, streakBest: 7, lastDailyCompletedISO: '2026-03-10' }),
       '2026-03-12',
     );
 
-    expect(next.streakCurrent).toBe(1);
-    expect(next.streakBest).toBe(7);
+    expect(result.profile.streakCurrent).toBe(1);
+    expect(result.profile.streakBest).toBe(7);
+    expect(result.incremented).toBe(true);
+    expect(result.reason).toBe('streak_reset');
   });
 });

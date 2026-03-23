@@ -46,7 +46,7 @@ export default function PrimaryButton({ title, onPress, disabled, style }: Prima
         disabled={disabled}
         style={[
           styles.base,
-          theme.shadow(3),
+          theme.shadow(2),
           {
             backgroundColor: disabled ? theme.colors.border : theme.colors.primary,
             opacity: disabled ? 0.6 : 1,

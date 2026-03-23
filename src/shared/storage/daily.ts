@@ -2,7 +2,8 @@ import { Difficulty, GameId, normalizeDifficulty } from '../../games/types';
 import { STORAGE_KEYS } from './keys';
 import { getLocalDayKey, getUtcDayKey } from '../utils/time';
 import { createSeededRng, pickOne, randomInt } from '../utils/random';
-import { getDailySeed } from '../utils/seed';
+import { getDailySeed, hashString } from '../utils/seed';
+import { logEvent, logWarn } from '../../core/telemetry';
 import { deleteItem, getItem, setItem } from './secureStore';
 import { getProfile, updateProfile } from './profile';
 import { applyDailyCompletionToStreak } from '../gamification/streak';
@@ -53,6 +54,133 @@ type CompleteDailyStageInput = {
 
 const DAILY_STAGE_POOL: DailyStageGameId[] = ['mentalmath', 'memory', 'sudoku', 'speedmatch', 'patternmemory', 'focusgrid'];
 const DIFFICULTY_POOL: Difficulty[] = ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'];
+
+// ─── Game families ───────────────────────────────────────────────────────────
+type GameFamily = 'memory' | 'logic' | 'speed';
+
+const GAME_FAMILY: Record<DailyStageGameId, GameFamily> = {
+  memory: 'memory',
+  patternmemory: 'memory',
+  sudoku: 'logic',
+  mentalmath: 'logic',
+  speedmatch: 'speed',
+  focusgrid: 'speed',
+};
+
+const FAMILY_POOL: Record<GameFamily, DailyStageGameId[]> = {
+  memory: ['memory', 'patternmemory'],
+  logic: ['sudoku', 'mentalmath'],
+  speed: ['speedmatch', 'focusgrid'],
+};
+
+// Orden fijo de stages: speed → memory → logic
+const STAGE_FAMILY_ORDER: GameFamily[] = ['speed', 'memory', 'logic'];
+
+type LastDailyCircuit = {
+  dateISO: string;
+  games: DailyStageGameId[];
+};
+
+// ─── User seed persistente ───────────────────────────────────────────────────
+async function getOrCreateDailyUserSeed(): Promise<number> {
+  const raw = await getItem(STORAGE_KEYS.dailyUserSeed);
+  if (raw !== null && raw !== undefined) {
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  const seed = ((Math.floor(Math.random() * 0xFFFFFFFE) + 1) >>> 0) || 1;
+  await setItem(STORAGE_KEYS.dailyUserSeed, String(seed));
+  return seed;
+}
+
+// ─── Persistencia del último circuito ───────────────────────────────────────
+async function getLastDailyCircuit(): Promise<LastDailyCircuit | null> {
+  const raw = await getItem(STORAGE_KEYS.lastDailyCircuit);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed.dateISO === 'string' && Array.isArray(parsed.games)) {
+      return { dateISO: parsed.dateISO, games: parsed.games as DailyStageGameId[] };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveLastDailyCircuit(circuit: LastDailyCircuit): Promise<void> {
+  await setItem(STORAGE_KEYS.lastDailyCircuit, JSON.stringify(circuit));
+}
+
+// ─── Constructor de circuito determinista ────────────────────────────────────
+function buildDailyCircuit({
+  dateISO,
+  userSeed,
+  yesterdayGames,
+}: {
+  dateISO: string;
+  userSeed: number;
+  yesterdayGames?: DailyStageGameId[];
+}): [DailyStageGameId, DailyStageGameId, DailyStageGameId] {
+  const combinedSeed = hashString(`${dateISO}:${userSeed}`);
+  const rng = createSeededRng(combinedSeed);
+
+  const selected = STAGE_FAMILY_ORDER.map((family) => {
+    const pool = FAMILY_POOL[family];
+    const preferred = yesterdayGames
+      ? pool.filter((g) => !yesterdayGames.includes(g))
+      : pool;
+    return pickOne(preferred.length > 0 ? preferred : pool, rng);
+  });
+
+  return selected as [DailyStageGameId, DailyStageGameId, DailyStageGameId];
+}
+
+// ─── Build stages a partir de juegos seleccionados ───────────────────────────
+function buildStagesFromGames(
+  dailySeed: number,
+  games: [DailyStageGameId, DailyStageGameId, DailyStageGameId],
+): [DailyStage, DailyStage, DailyStage] {
+  const rng = createSeededRng(dailySeed);
+  return games.map((gameId, index) => ({
+    gameId,
+    difficulty: pickOne(DIFFICULTY_POOL, rng),
+    seed: randomInt(1, 2_147_483_647, rng) + index,
+    completed: false,
+  })) as [DailyStage, DailyStage, DailyStage];
+}
+
+// ─── Validación en desarrollo ────────────────────────────────────────────────
+function validateDaily(games: DailyStageGameId[]): void {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    if (games.length !== 3) {
+      throw new Error(`validateDaily: se esperaban 3 juegos, se obtuvieron ${games.length}`);
+    }
+    if (new Set(games).size !== 3) {
+      throw new Error(`validateDaily: juegos duplicados: ${games.join(', ')}`);
+    }
+    const families = games.map((g) => GAME_FAMILY[g]);
+    if (new Set(families).size !== 3) {
+      throw new Error(`validateDaily: cobertura de familia incompleta – familias: ${families.join(', ')}`);
+    }
+  }
+}
+
+// ─── Helpers de seguridad ────────────────────────────────────────────────────
+function sanitizeStageIndex(raw: unknown, fallback: number, dateISO?: unknown): number {
+  if (typeof raw !== 'number') return fallback;
+  const floored = Math.floor(raw);
+  const clamped = Math.max(0, Math.min(3, floored));
+  if (clamped !== floored) {
+    logWarn('daily_invalid_state_detected', {
+      reason: 'currentStageIndex_out_of_range',
+      raw,
+      corrected: clamped,
+      dateISO: typeof dateISO === 'string' ? dateISO : undefined,
+    });
+  }
+  return clamped;
+}
 
 let dailyMutationQueue: Promise<void> = Promise.resolve();
 
@@ -184,10 +312,7 @@ export async function getDaily(): Promise<DailyState | null> {
         claimedRewardAtISO: typeof parsed.claimedRewardAtISO === 'string' ? parsed.claimedRewardAtISO : undefined,
         dailySeed: parsed.dailySeed,
         stages: normalizedStages,
-        currentStageIndex:
-          typeof parsed.currentStageIndex === 'number'
-            ? Math.max(0, Math.min(3, Math.floor(parsed.currentStageIndex)))
-            : derivedIndex,
+        currentStageIndex: sanitizeStageIndex(parsed.currentStageIndex, derivedIndex, parsed.lastDailyDateISO),
         startedAtISO: typeof parsed.startedAtISO === 'string' ? parsed.startedAtISO : undefined,
         completedAtISO: typeof parsed.completedAtISO === 'string' ? parsed.completedAtISO : undefined,
       };
@@ -226,11 +351,39 @@ export async function ensureDailyToday(): Promise<DailyState> {
     if (JSON.stringify(normalized) !== JSON.stringify(currentDaily)) {
       await setItem(STORAGE_KEYS.daily, JSON.stringify(normalized));
     }
+    logEvent('daily_loaded_existing', { dateISO: localTodayKey, status: normalized.status, currentStageIndex: normalized.currentStageIndex });
     return normalized;
   }
 
-  const fresh = defaultDaily(localTodayKey);
+  const [userSeed, lastCircuit] = await Promise.all([
+    getOrCreateDailyUserSeed(),
+    getLastDailyCircuit(),
+  ]);
+
+  const yesterdayGames =
+    lastCircuit !== null && lastCircuit.dateISO !== localTodayKey
+      ? (lastCircuit.games as DailyStageGameId[])
+      : undefined;
+
+  const dailySeed = getDailySeed(localTodayKey);
+  const games = buildDailyCircuit({ dateISO: localTodayKey, userSeed, yesterdayGames });
+  validateDaily(games);
+  const stages = buildStagesFromGames(dailySeed, games);
+
+  const fresh: DailyState = {
+    dateISO: localTodayKey,
+    lastDailyDateISO: localTodayKey,
+    status: 'not_started',
+    completed: false,
+    rewardClaimed: false,
+    dailySeed,
+    stages,
+    currentStageIndex: 0,
+  };
+
+  await saveLastDailyCircuit({ dateISO: localTodayKey, games: Array.from(games) });
   await setItem(STORAGE_KEYS.daily, JSON.stringify(fresh));
+  logEvent('daily_created', { dateISO: localTodayKey, games: Array.from(games) });
   return fresh;
 }
 
@@ -258,11 +411,11 @@ async function markDailyCompletedInternal(): Promise<DailyState> {
     return next;
   }
 
-  const streaked = applyDailyCompletionToStreak(profile, todayISO);
+  const { profile: streakUpdated } = applyDailyCompletionToStreak(profile, todayISO);
   await updateProfile({
-    streakCurrent: streaked.streakCurrent,
-    streakBest: streaked.streakBest,
-    lastDailyCompletedISO: streaked.lastDailyCompletedISO,
+    streakCurrent: streakUpdated.streakCurrent,
+    streakBest: streakUpdated.streakBest,
+    lastDailyCompletedISO: streakUpdated.lastDailyCompletedISO,
   });
 
   return next;
@@ -282,6 +435,7 @@ export async function completeDailyStage(input: CompleteDailyStageInput): Promis
     const current = await ensureDailyToday();
 
     if (current.completed) {
+      logWarn('daily_stage_complete_skipped_already_completed', { dateISO: current.dateISO, gameId: input.gameId, reason: 'circuit_already_completed' });
       return {
         daily: current,
         stageCompletedNow: false,
@@ -296,6 +450,7 @@ export async function completeDailyStage(input: CompleteDailyStageInput): Promis
 
     const stage = current.stages[index];
     if (!stage || stage.gameId !== input.gameId) {
+      logWarn('daily_invalid_state_detected', { reason: 'stage_gameId_mismatch', index, expected: input.gameId, actual: stage?.gameId, dateISO: current.dateISO });
       return {
         daily: current,
         stageCompletedNow: false,
@@ -305,6 +460,7 @@ export async function completeDailyStage(input: CompleteDailyStageInput): Promis
     }
 
     if (stage.completed) {
+      logWarn('daily_stage_complete_skipped_already_completed', { dateISO: current.dateISO, stageIndex: index, gameId: input.gameId, reason: 'stage_already_completed' });
       return {
         daily: current,
         stageCompletedNow: false,
@@ -339,7 +495,10 @@ export async function completeDailyStage(input: CompleteDailyStageInput): Promis
 
     await setItem(STORAGE_KEYS.daily, JSON.stringify(next));
 
+    logEvent('daily_stage_completed', { dateISO: current.dateISO, stageIndex: index, gameId: input.gameId, difficulty: input.difficulty });
+
     if (allCompleted) {
+      logEvent('daily_circuit_completed', { dateISO: current.dateISO });
       const marked = await markDailyCompletedInternal();
       return {
         daily: marked,
@@ -397,6 +556,7 @@ export async function markDailyStageStarted(input: { stageIndex?: number; gameId
     };
 
     await setItem(STORAGE_KEYS.daily, JSON.stringify(next));
+    logEvent('daily_stage_started', { dateISO: next.lastDailyDateISO, stageIndex: index, gameId: input.gameId });
     return next;
   });
 }
@@ -410,11 +570,13 @@ export async function claimDailyReward(): Promise<{ daily: DailyState; alreadyCl
     }
 
     if (daily.rewardClaimed) {
+      logWarn('daily_reward_claim_skipped_already_claimed', { dateISO: daily.lastDailyDateISO });
       return { daily, alreadyClaimed: true };
     }
 
     const claimed: DailyState = { ...daily, rewardClaimed: true, claimedRewardAtISO: nowISO() };
     await setItem(STORAGE_KEYS.daily, JSON.stringify(claimed));
+    logEvent('daily_reward_claimed', { dateISO: daily.lastDailyDateISO });
     return { daily: claimed, alreadyClaimed: false };
   });
 }

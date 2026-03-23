@@ -2,6 +2,7 @@ import { Difficulty, GameId } from '../../games/types';
 import { getLevelByXp } from './levels';
 import { getProfile, updateProfile } from '../storage/profile';
 import { computeXp } from '../../core/gamification/economy';
+import { logEvent } from '../../core/telemetry';
 
 type CalcXpInput = {
   gameId: GameId;
@@ -44,6 +45,8 @@ export async function grantXp(input: GrantXpInput) {
       earnedXp,
     });
   }
+
+  logEvent('xp_granted', { gameId: input.gameId, mode, difficulty: input.difficulty, baseXp, earnedXp });
 
   const updated = await updateProfile({ xpTotal, levelId: level.id });
   return { earnedXp, profile: updated, level };

@@ -1,5 +1,6 @@
 import { Difficulty, GameId } from '../../games/types';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
+import { logEvent } from '../../core/telemetry';
 import { claimDailyReward, completeDailyStage, getDailyProgress } from '../storage/daily';
 import { getProfile } from '../storage/profile';
 import { grantXp } from './xp';
@@ -122,18 +123,27 @@ async function completeDailyGameSession(input: CompleteGameSessionInput): Promis
     typeof stageIndex === 'number' ? stageIndex : Math.max(0, stageResult.daily.currentStageIndex - 1);
   const savedResult = stageResult.daily.stages[completedStageIndex]?.result;
 
-  return {
+  const dailyCompletion: DailyCompletionData = {
+    kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
+    stageIndex: completedStageIndex,
     earnedXp,
     earnedSp,
-    dailyCompletion: {
-      kind: stageResult.circuitCompletedNow ? 'final' : 'stage',
-      stageIndex: completedStageIndex,
-      earnedXp,
-      earnedSp,
-      result: savedResult,
-      progress: getDailyProgress(stageResult.daily),
-    },
+    result: savedResult,
+    progress: getDailyProgress(stageResult.daily),
   };
+
+  logEvent('game_session_completed', {
+    gameId,
+    difficulty,
+    mode: 'daily',
+    won,
+    earnedXp,
+    earnedSp,
+    stageIndex: completedStageIndex,
+    circuitCompleted: stageResult.circuitCompletedNow,
+  });
+
+  return { earnedXp, earnedSp, dailyCompletion };
 }
 
 export async function completeGameSession(input: CompleteGameSessionInput): Promise<CompleteGameSessionResult> {
@@ -194,5 +204,6 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
   });
   const earnedSp = spResult.earnedSeasonPoints;
 
+  logEvent('game_session_completed', { gameId, difficulty, mode, won, earnedXp, earnedSp });
   return { earnedXp, earnedSp };
 }
