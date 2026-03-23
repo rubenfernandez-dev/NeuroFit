@@ -29,14 +29,21 @@ type ResultSummary = {
   accuracyPct: number;
 };
 
-const MATCH_PROBABILITY = 0.35;
 const SYMBOL_LIBRARY = ['●', '■', '▲', '◆', '★', '✚', '⬢', '◉', '☼'];
-const SPEEDMATCH_CONFIG: Record<Difficulty, { durationSec: number; symbolCount: number }> = {
-  principiante: { durationSec: 60, symbolCount: 3 },
-  avanzado: { durationSec: 70, symbolCount: 4 },
-  experto: { durationSec: 80, symbolCount: 5 },
-  maestro: { durationSec: 95, symbolCount: 6 },
-  gran_maestro: { durationSec: 110, symbolCount: 7 },
+type SpeedMatchDifficultyConfig = {
+  durationSec: number;
+  symbolCount: number;
+  matchProbability: number;
+  stimulusIntervalMs: number;
+};
+
+const SPEEDMATCH_CONFIG: Record<Difficulty, SpeedMatchDifficultyConfig> = {
+  // La dificultad escala por menos matches, mas simbolos y menor intervalo visual.
+  principiante: { durationSec: 60, symbolCount: 3, matchProbability: 0.5, stimulusIntervalMs: 900 },
+  avanzado: { durationSec: 60, symbolCount: 4, matchProbability: 0.42, stimulusIntervalMs: 780 },
+  experto: { durationSec: 56, symbolCount: 5, matchProbability: 0.34, stimulusIntervalMs: 670 },
+  maestro: { durationSec: 52, symbolCount: 6, matchProbability: 0.27, stimulusIntervalMs: 560 },
+  gran_maestro: { durationSec: 48, symbolCount: 7, matchProbability: 0.2, stimulusIntervalMs: 470 },
 };
 
 function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
@@ -51,18 +58,24 @@ function pickInitialSymbol(pool: string[], sessionSeed: number, offset: number):
   return pickOne(pool, rng);
 }
 
-function nextSymbolFrom(previousSymbol: string, pool: string[], sessionSeed: number, round: number): string {
+function nextSymbolFrom(
+  previousSymbol: string,
+  pool: string[],
+  sessionSeed: number,
+  round: number,
+  matchProbability: number,
+): string {
   const rng = createSeededRng(sessionSeed + round * 101 + 17);
-  const shouldMatch = rng() < MATCH_PROBABILITY;
+  const shouldMatch = rng() < matchProbability;
   if (shouldMatch) return previousSymbol;
 
   const alternatives = pool.filter((symbol) => symbol !== previousSymbol);
   return pickOne(alternatives.length > 0 ? alternatives : pool, rng);
 }
 
-function createSession(symbolPool: string[], durationSec: number, sessionSeed: number) {
+function createSession(symbolPool: string[], config: SpeedMatchDifficultyConfig, sessionSeed: number) {
   const previousSymbol = pickInitialSymbol(symbolPool, sessionSeed, 0);
-  const currentSymbol = nextSymbolFrom(previousSymbol, symbolPool, sessionSeed, 1);
+  const currentSymbol = nextSymbolFrom(previousSymbol, symbolPool, sessionSeed, 1, config.matchProbability);
 
   return {
     previousSymbol,
@@ -71,7 +84,7 @@ function createSession(symbolPool: string[], durationSec: number, sessionSeed: n
     correct: 0,
     mistakes: 0,
     score: 0,
-    timeLeft: durationSec,
+    timeLeft: config.durationSec,
     sessionSeed,
     sessionStarted: true,
     didFinish: false,
@@ -100,6 +113,15 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   const [resultVisible, setResultVisible] = useState(false);
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [inputLocked, setInputLocked] = useState(false);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearAdvanceTimer = () => {
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -155,7 +177,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       }
 
       const nextSeed = getSessionSeed(isDaily, dailySeed);
-      const base = createSession(symbolPool, config.durationSec, nextSeed);
+      const base = createSession(symbolPool, config, nextSeed);
 
       if (!mounted) return;
       setPreviousSymbol(base.previousSymbol);
@@ -170,14 +192,16 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       setDidFinish(false);
       setResultVisible(false);
       setResultSummary(null);
+      setInputLocked(false);
       await trackSessionStart({ gameId: 'speedmatch', mode: isDaily ? 'daily' : 'normal' });
     };
 
     init();
     return () => {
       mounted = false;
+      clearAdvanceTimer();
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex, config.durationSec, symbolPool]);
+  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex, config, symbolPool]);
 
   useEffect(() => {
     if (!sessionStarted || didFinish || dailyBlockedReason) return;
@@ -232,6 +256,8 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
   const finishSession = async () => {
     if (finishing || didFinish) return;
+    clearAdvanceTimer();
+    setInputLocked(false);
     setFinishing(true);
     setDidFinish(true);
 
@@ -298,7 +324,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   }, [timeLeft, didFinish]);
 
   const answer = (isMatchChoice: boolean) => {
-    if (dailyBlockedReason || didFinish || !sessionStarted) return;
+    if (dailyBlockedReason || didFinish || !sessionStarted || inputLocked) return;
 
     const expectedMatch = previousSymbol === currentSymbol;
     const wasCorrect = isMatchChoice === expectedMatch;
@@ -308,20 +334,33 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     const nextMistakes = wasCorrect ? mistakes : mistakes + 1;
     const nextScore = wasCorrect ? score + 10 : Math.max(0, score - 5);
     const nextRound = round + 1;
-    const nextSymbol = nextSymbolFrom(currentSymbol, symbolPool, sessionSeed, nextRound);
+    const nextSymbol = nextSymbolFrom(
+      currentSymbol,
+      symbolPool,
+      sessionSeed,
+      nextRound,
+      config.matchProbability,
+    );
 
     setCorrect(nextCorrect);
     setMistakes(nextMistakes);
     setScore(nextScore);
-    setPreviousSymbol(currentSymbol);
-    setCurrentSymbol(nextSymbol);
-    setRound(nextRound);
+    setInputLocked(true);
+    clearAdvanceTimer();
+    advanceTimerRef.current = setTimeout(() => {
+      setPreviousSymbol(currentSymbol);
+      setCurrentSymbol(nextSymbol);
+      setRound(nextRound);
+      setInputLocked(false);
+      advanceTimerRef.current = null;
+    }, config.stimulusIntervalMs);
   };
 
   const restart = async () => {
     if (isDaily) return;
+    clearAdvanceTimer();
     const nextSeed = getSessionSeed(false);
-    const base = createSession(symbolPool, config.durationSec, nextSeed);
+    const base = createSession(symbolPool, config, nextSeed);
 
     setPreviousSymbol(base.previousSymbol);
     setCurrentSymbol(base.currentSymbol);
@@ -334,6 +373,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     setDidFinish(false);
     setResultVisible(false);
     setResultSummary(null);
+    setInputLocked(false);
     setSessionStarted(true);
     await trackSessionStart({ gameId: 'speedmatch', mode: 'normal' });
   };
@@ -372,10 +412,11 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
             <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 14 }]}>Actual</Text>
             <Text style={{ color: theme.colors.text, fontSize: 74, marginTop: 4 }}>{currentSymbol}</Text>
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 8 }]}>¿Coincide con el símbolo anterior?</Text>
+            <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 4 }]}>Ritmo: {Math.round(1000 / config.stimulusIntervalMs * 10) / 10} est./s</Text>
 
             <View style={{ marginTop: 14, width: '100%', flexDirection: 'row', gap: 10 }}>
-              <Button title="Match" onPress={() => answer(true)} style={{ flex: 1 }} />
-              <Button title="No Match" variant="secondary" onPress={() => answer(false)} style={{ flex: 1 }} />
+              <Button title="Match" onPress={() => answer(true)} style={{ flex: 1 }} disabled={inputLocked} />
+              <Button title="No Match" variant="secondary" onPress={() => answer(false)} style={{ flex: 1 }} disabled={inputLocked} />
             </View>
           </Card>
         ) : null}

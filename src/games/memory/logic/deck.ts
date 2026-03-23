@@ -7,14 +7,31 @@ export type MemoryCardModel = {
   emoji: string;
 };
 
+export type MemoryDifficultyConfig = {
+  cols: number;
+  rows: number;
+  previewTimeMs: number;
+  mismatchLockMs: number;
+};
+
 const symbols = ['🐶', '🐱', '🦊', '🐼', '🐸', '🐵', '🦁', '🐰', '🐷', '🐙', '🐢', '🦄', '🐝', '🦋', '🐧', '🐬', '🦖', '🐞'];
 
+const MEMORY_CONFIG_BY_DIFFICULTY: Record<Difficulty, MemoryDifficultyConfig> = {
+  // Curva monotónica por tamaño + presión de memoria por preview decreciente.
+  principiante: { cols: 4, rows: 4, previewTimeMs: 1800, mismatchLockMs: 0 },
+  avanzado: { cols: 5, rows: 4, previewTimeMs: 1400, mismatchLockMs: 350 },
+  experto: { cols: 6, rows: 4, previewTimeMs: 1000, mismatchLockMs: 500 },
+  maestro: { cols: 6, rows: 6, previewTimeMs: 700, mismatchLockMs: 650 },
+  gran_maestro: { cols: 8, rows: 6, previewTimeMs: 450, mismatchLockMs: 800 },
+};
+
+export function getMemoryDifficultyConfig(difficulty: Difficulty): MemoryDifficultyConfig {
+  return MEMORY_CONFIG_BY_DIFFICULTY[difficulty];
+}
+
 export function getBoardSize(difficulty: Difficulty): { cols: number; rows: number } {
-  if (difficulty === 'principiante') return { cols: 4, rows: 4 };
-  if (difficulty === 'avanzado') return { cols: 6, rows: 4 };
-  if (difficulty === 'experto') return { cols: 6, rows: 6 };
-  if (difficulty === 'maestro') return { cols: 8, rows: 4 };
-  return { cols: 8, rows: 6 };
+  const config = getMemoryDifficultyConfig(difficulty);
+  return { cols: config.cols, rows: config.rows };
 }
 
 export function buildDeck(difficulty: Difficulty, seed?: number): MemoryCardModel[] {

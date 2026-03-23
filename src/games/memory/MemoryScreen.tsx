@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
-import { buildDeck, getBoardSize } from './logic/deck';
+import { buildDeck, getMemoryDifficultyConfig } from './logic/deck';
 import MemoryCard from './components/MemoryCard';
 import { clearMemoryState, getMemoryState, saveMemoryState } from './storage/memoryState';
 import Card from '../../shared/ui/Card';
@@ -46,8 +46,38 @@ export default function MemoryScreen({ route, navigation }: Props) {
   const [resultVisible, setResultVisible] = useState(false);
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [previewActive, setPreviewActive] = useState(false);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mismatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { cols } = getBoardSize(difficulty);
+  const memoryConfig = useMemo(() => getMemoryDifficultyConfig(difficulty), [difficulty]);
+  const { cols } = memoryConfig;
+
+  const clearPreviewTimer = () => {
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+  };
+
+  const clearMismatchTimer = () => {
+    if (mismatchTimerRef.current) {
+      clearTimeout(mismatchTimerRef.current);
+      mismatchTimerRef.current = null;
+    }
+  };
+
+  const startPreviewWindow = () => {
+    clearPreviewTimer();
+    setPreviewActive(true);
+    setLockInput(true);
+
+    previewTimerRef.current = setTimeout(() => {
+      setPreviewActive(false);
+      setLockInput(false);
+      previewTimerRef.current = null;
+    }, memoryConfig.previewTimeMs);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -89,6 +119,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
         setElapsedMs(saved.elapsedMs);
         setSessionStarted(Boolean(saved.sessionStarted));
         setDidFinish(Boolean(saved.didFinish));
+        setPreviewActive(false);
+        setLockInput(false);
 
         if (!saved.sessionStarted) {
           await trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
@@ -107,14 +139,17 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setResultVisible(false);
       setResultSummary(null);
       setSessionStarted(true);
+      startPreviewWindow();
       await trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
     };
     init();
 
     return () => {
       mounted = false;
+      clearPreviewTimer();
+      clearMismatchTimer();
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex]);
+  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex, memoryConfig.previewTimeMs]);
 
   useEffect(() => {
     if (!sessionStarted || cards.length === 0 || didFinish || dailyBlockedReason) return;
@@ -186,7 +221,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
   const onCardPress = (index: number) => {
     if (dailyBlockedReason) return;
-    if (lockInput || flipped.includes(index) || matched.includes(index)) return;
+    if (previewActive || lockInput || flipped.includes(index) || matched.includes(index)) return;
     const nextFlipped = [...flipped, index];
     setFlipped(nextFlipped);
 
@@ -201,11 +236,18 @@ export default function MemoryScreen({ route, navigation }: Props) {
         setFlipped([]);
       } else {
         void playErrorFeedback();
+        clearMismatchTimer();
+        if (memoryConfig.mismatchLockMs <= 0) {
+          setFlipped([]);
+          return;
+        }
+
         setLockInput(true);
-        setTimeout(() => {
+        mismatchTimerRef.current = setTimeout(() => {
           setFlipped([]);
           setLockInput(false);
-        }, 650);
+          mismatchTimerRef.current = null;
+        }, memoryConfig.mismatchLockMs);
       }
     }
   };
@@ -221,6 +263,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setResultVisible(false);
     setResultSummary(null);
     setSessionStarted(true);
+    setLockInput(false);
+    startPreviewWindow();
     trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
   };
 
@@ -252,7 +296,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
           <MemoryCard
             key={card.id}
             emoji={card.emoji}
-            isFaceUp={flipped.includes(index)}
+            isFaceUp={previewActive || flipped.includes(index)}
             isMatched={matched.includes(index)}
             onPress={() => onCardPress(index)}
           />
