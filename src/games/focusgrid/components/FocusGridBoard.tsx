@@ -44,7 +44,6 @@ export default function FocusGridBoard({
     >
       {numbers.map((value) => {
         const alreadySolved = value < nextExpected;
-        const isCurrentTarget = value === nextExpected;
         const isFeedbackCell = tapFeedback?.value === value;
         const isIncorrectFlash = isFeedbackCell && tapFeedback?.type === 'incorrect';
         const isCorrectFlash = isFeedbackCell && tapFeedback?.type === 'correct';
@@ -57,9 +56,6 @@ export default function FocusGridBoard({
           bg = theme.colors.success;
           border = theme.colors.success;
           textColor = '#FFFFFF';
-        } else if (isCurrentTarget) {
-          bg = theme.colors.primarySoft;
-          border = theme.colors.primary;
         }
 
         if (isIncorrectFlash) {

@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { generateQuestions } from './logic/questions';
+import { computeMentalMathRewardScore, evaluateMentalMathWin, getMentalMathSessionConfig } from './logic/session';
 import HUD from './components/HUD';
 import Button from '../../shared/ui/Button';
 import Card from '../../shared/ui/Card';
@@ -14,7 +15,7 @@ import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/da
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
@@ -23,6 +24,8 @@ type ResultSummary = {
   correct: number;
   wrong: number;
   score: number;
+  won: boolean;
+  reason: 'timeout' | 'error_limit';
   earnedXp: number;
   earnedSp: number;
 };
@@ -32,12 +35,13 @@ export default function MentalMathScreen({ route, navigation }: Props) {
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
+  const sessionConfig = useMemo(() => getMentalMathSessionConfig(difficulty), [difficulty]);
 
   const [questions, setQuestions] = useState(generateQuestions(difficulty, 40, isDaily ? dailySeed : undefined));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [wrong, setWrong] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(60);
+  const [timeLeft, setTimeLeft] = useState(sessionConfig.initialTimeSec);
   const [inputValue, setInputValue] = useState('');
   const [sessionStarted, setSessionStarted] = useState(false);
   const [didFinish, setDidFinish] = useState(false);
@@ -100,7 +104,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       setCurrentIndex(0);
       setCorrect(0);
       setWrong(0);
-      setTimeLeft(60);
+      setTimeLeft(sessionConfig.initialTimeSec);
       setInputValue('');
       setSessionStarted(true);
       setDidFinish(false);
@@ -113,7 +117,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     return () => {
       mounted = false;
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex]);
+  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex, sessionConfig.initialTimeSec]);
 
   useEffect(() => {
     if (!sessionStarted || didFinish || dailyBlockedReason) return;
@@ -165,33 +169,43 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
   const current = useMemo(() => questions[currentIndex % questions.length], [questions, currentIndex]);
 
-  const finish = async () => {
+  const finish = async (reason: 'timeout' | 'error_limit') => {
     if (finishing || didFinish) return;
     setFinishing(true);
     setDidFinish(true);
-    const score = Math.max(0, Math.min(100, Math.round((correct / Math.max(1, questions.length)) * 100)));
-    await trackWin({
-      gameId: 'mentalmath',
-      mode: isDaily ? 'daily' : 'normal',
-      difficulty,
-      durationMs: 60000,
-      score,
-    });
+    const elapsedSec = Math.max(
+      1,
+      sessionConfig.initialTimeSec + correct * sessionConfig.bonusOnCorrectSec - timeLeft,
+    );
+    const score = computeMentalMathRewardScore({ correct, wrong, elapsedSec, difficulty });
+    const won = reason !== 'error_limit' && evaluateMentalMathWin({ correct, wrong, difficulty });
+
+    if (won) {
+      await trackWin({
+        gameId: 'mentalmath',
+        mode: isDaily ? 'daily' : 'normal',
+        difficulty,
+        durationMs: elapsedSec * 1000,
+        score,
+      });
+    }
+
     const completionResult = await completeGameSession({
       gameId: 'mentalmath',
       difficulty,
       mode: isDaily ? 'daily' : 'normal',
-      won: true,
+      won,
       stageIndex,
       metrics: {
-        durationMs: 60_000,
+        durationMs: elapsedSec * 1000,
         score,
         mistakes: wrong,
       },
     });
 
     if (isDaily && completionResult.dailyCompletion) {
-      void playVictoryFeedback();
+      if (won) void playVictoryFeedback();
+      else void playDefeatFeedback();
       await clearMentalMathState();
       setSessionStarted(false);
       setFinishing(false);
@@ -204,11 +218,14 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
     await clearMentalMathState();
     setSessionStarted(false);
-    void playVictoryFeedback();
+    if (won) void playVictoryFeedback();
+    else void playDefeatFeedback();
     setResultSummary({
       correct,
       wrong,
       score,
+      won,
+      reason,
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
     });
@@ -218,9 +235,16 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (timeLeft === 0) {
-      finish();
+      finish('timeout');
     }
   }, [timeLeft]);
+
+  useEffect(() => {
+    if (didFinish) return;
+    if (wrong >= sessionConfig.maxErrors) {
+      finish('error_limit');
+    }
+  }, [didFinish, sessionConfig.maxErrors, wrong]);
 
   const submit = () => {
     if (dailyBlockedReason || didFinish) return;
@@ -230,6 +254,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     if (answer === current.answer) {
       void playSuccessFeedback();
       setCorrect((prev) => prev + 1);
+      setTimeLeft((prev) => Math.min(sessionConfig.maxTimeSec, prev + sessionConfig.bonusOnCorrectSec));
     } else {
       void playErrorFeedback();
       setWrong((prev) => prev + 1);
@@ -251,7 +276,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     setCurrentIndex(0);
     setCorrect(0);
     setWrong(0);
-    setTimeLeft(60);
+    setTimeLeft(sessionConfig.initialTimeSec);
     setInputValue('');
     setDidFinish(false);
     setResultVisible(false);
@@ -272,6 +297,9 @@ export default function MentalMathScreen({ route, navigation }: Props) {
         </View>
         <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
         <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Respuesta: {inputValue || '...'}</Text>
+        <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
+          +{sessionConfig.bonusOnCorrectSec}s por acierto · Máx. fallos: {sessionConfig.maxErrors}
+        </Text>
       </Card>
 
       {dailyBlockedReason ? (
@@ -303,9 +331,15 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     <GameResultModal
       visible={resultVisible}
       onRequestClose={() => setResultVisible(false)}
-      variant="victory"
-      title="¡Sesión terminada!"
-      subtitle="Buen cálculo mental, sigue así."
+      variant={resultSummary?.won ? 'victory' : 'defeat'}
+      title={resultSummary?.won ? '¡Sesión terminada!' : 'Sesión fallida'}
+      subtitle={
+        resultSummary?.won
+          ? 'Buen cálculo mental, sigue así.'
+          : resultSummary?.reason === 'error_limit'
+            ? 'Alcanzaste el límite de fallos.'
+            : 'No se alcanzó el objetivo mínimo para victoria.'
+      }
       metrics={[
         { label: 'Aciertos', value: resultSummary?.correct ?? 0 },
         { label: 'Fallos', value: resultSummary?.wrong ?? 0 },

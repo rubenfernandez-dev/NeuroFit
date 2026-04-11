@@ -89,10 +89,49 @@ function areAdjacent(indexA: number, indexB: number, cols: number): boolean {
   return dr + dc === 1;
 }
 
+function areDiagonalAdjacent(indexA: number, indexB: number, cols: number): boolean {
+  const a = indexToRC(indexA, cols);
+  const b = indexToRC(indexB, cols);
+  return Math.abs(a.row - b.row) === 1 && Math.abs(a.col - b.col) === 1;
+}
+
+function noNumbersBetweenDiagonal(board: Array<number | null>, indexA: number, indexB: number, cols: number): boolean {
+  const a = indexToRC(indexA, cols);
+  const b = indexToRC(indexB, cols);
+  const dr = b.row - a.row;
+  const dc = b.col - a.col;
+
+  if (Math.abs(dr) !== Math.abs(dc) || dr === 0) return false;
+
+  const rowStep = dr > 0 ? 1 : -1;
+  const colStep = dc > 0 ? 1 : -1;
+  const steps = Math.abs(dr);
+
+  for (let step = 1; step < steps; step += 1) {
+    const row = a.row + rowStep * step;
+    const col = a.col + colStep * step;
+    if (board[row * cols + col] !== null) return false;
+  }
+
+  return true;
+}
+
+function noNumbersBetweenLinear(board: Array<number | null>, indexA: number, indexB: number): boolean {
+  const start = Math.min(indexA, indexB) + 1;
+  const end = Math.max(indexA, indexB) - 1;
+  for (let index = start; index <= end; index += 1) {
+    if (board[index] !== null) return false;
+  }
+  return true;
+}
+
 export function isValidMatchConnection(board: Array<number | null>, indexA: number, indexB: number, cols: number): boolean {
   if (indexA === indexB) return false;
   if (noNumbersBetweenInRow(board, indexA, indexB, cols)) return true;
   if (noNumbersBetweenInCol(board, indexA, indexB, cols)) return true;
+  if (noNumbersBetweenDiagonal(board, indexA, indexB, cols)) return true;
+  if (noNumbersBetweenLinear(board, indexA, indexB)) return true;
+  if (areDiagonalAdjacent(indexA, indexB, cols)) return true;
   return areAdjacent(indexA, indexB, cols);
 }
 

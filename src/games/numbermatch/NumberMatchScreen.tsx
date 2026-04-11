@@ -11,6 +11,7 @@ import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { trackNumberMatchResult, trackSessionStart } from '../../shared/storage/stats';
+import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 import {
@@ -140,10 +141,26 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
     const init = async () => {
       if (isDaily) {
-        // TODO(numbermatch-daily): numbermatch aun no forma parte del pool diario.
-        setDailyBlockedReason('Number Match aun no esta habilitado para Reto diario.');
-        Alert.alert('No disponible en diario', 'Number Match aun no esta habilitado para Reto diario.');
-        return;
+        const daily = await ensureDailyToday();
+        const expectedStage = daily.stages[daily.currentStageIndex];
+
+        if (daily.completed) {
+          setDailyBlockedReason('Reto diario ya completado, vuelve mañana.');
+          Alert.alert('Reto diario completado', 'Reto diario ya completado, vuelve mañana.');
+          return;
+        }
+
+        if (!expectedStage || expectedStage.gameId !== 'numbermatch') {
+          setDailyBlockedReason('Esta etapa no esta activa. Continua el circuito desde Reto diario.');
+          return;
+        }
+
+        if (typeof stageIndex === 'number' && stageIndex !== daily.currentStageIndex) {
+          setDailyBlockedReason('Esta etapa ya no esta activa. Continua desde Reto diario.');
+          return;
+        }
+
+        await markDailyStageStarted({ stageIndex, gameId: 'numbermatch' });
       }
 
       const saved = await getNumberMatchState();
@@ -466,7 +483,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
         {!dailyBlockedReason ? (
           <Card variant="cyan">
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, textAlign: 'center' }]}>
-              Empareja numeros iguales o que sumen 10. Deben estar conectados por fila/columna sin bloqueos.
+              Empareja numeros iguales o que sumen 10. Se permite conexion por fila, columna, diagonal y continuidad visual entre lineas.
             </Text>
 
             <View style={{ marginTop: 12, alignSelf: 'center' }}>

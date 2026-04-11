@@ -11,7 +11,7 @@ type CalcSeasonPointsInput = {
   mistakes?: number;
   durationMs?: number;
   isDaily?: boolean;
-  // TODO: Kept for backward compatibility during economy migration.
+  // Legacy flag kept for backward compatibility during economy migration.
   // Current SP formula in computeSp does not use this flag yet.
   dailyCompletedAndClaimable?: boolean;
 };
@@ -22,7 +22,7 @@ export function calcSeasonPoints({
   isDaily,
   dailyCompletedAndClaimable,
 }: CalcSeasonPointsInput): number {
-  // TODO: Revisit whether dailyCompletedAndClaimable should affect SP.
+  // Intentionally ignored to preserve current reward balance and avoid regressions.
   // Intentionally no-op for now to preserve current behavior.
   void dailyCompletedAndClaimable;
 

@@ -13,6 +13,17 @@ export const GAMES: GameDefinition[] = [
     tags: ['Popular'],
   },
   {
+    id: 'numbermatch',
+    title: 'Number Match',
+    subtitle: 'Empareja números iguales o que sumen 10',
+    icon: '🔢',
+    routeName: 'NumberMatch',
+    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
+    enabled: true,
+    category: 'logic',
+    tags: ['Nuevo'],
+  },
+  {
     id: 'memory',
     title: 'Memoria',
     subtitle: 'Entrena memoria visual y velocidad',
@@ -66,17 +77,6 @@ export const GAMES: GameDefinition[] = [
     enabled: true,
     category: 'attention',
     tags: ['Reto'],
-  },
-  {
-    id: 'numbermatch',
-    title: 'Number Match',
-    subtitle: 'Empareja números iguales o que sumen 10',
-    icon: '🔢',
-    routeName: 'NumberMatch',
-    difficulties: ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'],
-    enabled: true,
-    category: 'logic',
-    tags: ['Nuevo'],
   },
 ];
 

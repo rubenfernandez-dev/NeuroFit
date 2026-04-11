@@ -26,6 +26,7 @@ function getGameLabel(gameId: string): string {
   if (gameId === 'speedmatch') return 'Coincidencia rápida';
   if (gameId === 'patternmemory') return 'Memoria de patrones';
   if (gameId === 'focusgrid') return 'Cuadrícula de enfoque';
+  if (gameId === 'numbermatch') return 'Number Match';
   return gameId;
 }
 

@@ -17,6 +17,10 @@ export type MemoryState = {
   flipped: number[];
   matched: number[];
   attempts: number;
+  mismatches?: number;
+  currentStreak?: number;
+  bestStreak?: number;
+  roundScore?: number;
   elapsedMs: number;
   sessionStarted?: boolean;
   didFinish?: boolean;
@@ -54,6 +58,10 @@ function normalizeMemoryState(parsed: Record<string, unknown>): MemoryState | nu
     flipped,
     matched,
     attempts: normalizeNonNegativeInt(parsed.attempts),
+    mismatches: normalizeNonNegativeInt(parsed.mismatches),
+    currentStreak: normalizeNonNegativeInt(parsed.currentStreak),
+    bestStreak: normalizeNonNegativeInt(parsed.bestStreak),
+    roundScore: normalizeNonNegativeInt(parsed.roundScore),
     elapsedMs: normalizeNonNegativeInt(parsed.elapsedMs),
     sessionStarted: normalizeOptionalBoolean(parsed.sessionStarted),
     didFinish: normalizeOptionalBoolean(parsed.didFinish),

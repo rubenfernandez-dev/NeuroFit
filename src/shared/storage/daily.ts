@@ -11,7 +11,7 @@ import { nowISO } from '../utils/time';
 import { migrateLegacyUtcDailyToLocalDay } from './dailyDay';
 import { captureException, logWarning } from '../observability';
 
-type DailyStageGameId = 'mentalmath' | 'memory' | 'sudoku' | 'speedmatch' | 'patternmemory' | 'focusgrid';
+type DailyStageGameId = 'mentalmath' | 'memory' | 'sudoku' | 'speedmatch' | 'patternmemory' | 'focusgrid' | 'numbermatch';
 
 export type DailyStageResult = {
   durationMs?: number;
@@ -52,7 +52,7 @@ type CompleteDailyStageInput = {
   result?: DailyStageResult;
 };
 
-const DAILY_STAGE_POOL: DailyStageGameId[] = ['mentalmath', 'memory', 'sudoku', 'speedmatch', 'patternmemory', 'focusgrid'];
+const DAILY_STAGE_POOL: DailyStageGameId[] = ['mentalmath', 'memory', 'sudoku', 'speedmatch', 'patternmemory', 'focusgrid', 'numbermatch'];
 const DIFFICULTY_POOL: Difficulty[] = ['principiante', 'avanzado', 'experto', 'maestro', 'gran_maestro'];
 
 // ─── Game families ───────────────────────────────────────────────────────────
@@ -63,13 +63,14 @@ const GAME_FAMILY: Record<DailyStageGameId, GameFamily> = {
   patternmemory: 'memory',
   sudoku: 'logic',
   mentalmath: 'logic',
+  numbermatch: 'logic',
   speedmatch: 'speed',
   focusgrid: 'speed',
 };
 
 const FAMILY_POOL: Record<GameFamily, DailyStageGameId[]> = {
   memory: ['memory', 'patternmemory'],
-  logic: ['sudoku', 'mentalmath'],
+  logic: ['sudoku', 'mentalmath', 'numbermatch'],
   speed: ['speedmatch', 'focusgrid'],
 };
 
@@ -244,7 +245,7 @@ const defaultDaily = (dateISO: string): DailyState => {
 function normalizeStage(stage: unknown, fallback: DailyStage): DailyStage {
   if (!stage || typeof stage !== 'object') return fallback;
   const parsed = stage as Partial<DailyStage>;
-  const gameId = parsed.gameId === 'mentalmath' || parsed.gameId === 'memory' || parsed.gameId === 'sudoku' || parsed.gameId === 'speedmatch' || parsed.gameId === 'patternmemory' || parsed.gameId === 'focusgrid'
+  const gameId = parsed.gameId === 'mentalmath' || parsed.gameId === 'memory' || parsed.gameId === 'sudoku' || parsed.gameId === 'speedmatch' || parsed.gameId === 'patternmemory' || parsed.gameId === 'focusgrid' || parsed.gameId === 'numbermatch'
     ? parsed.gameId
     : fallback.gameId;
 

@@ -43,6 +43,8 @@ export async function updateNotificationPrefs(partial: Partial<NotificationPrefs
   return next;
 }
 
+// Legacy helper kept for compatibility with potential external tooling/scripts.
+// Prefer feature-level flows that cancel/schedule notifications explicitly.
 export async function resetNotificationPrefs() {
   await deleteItem(STORAGE_KEYS.notifications);
 }

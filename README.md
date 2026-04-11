@@ -80,6 +80,7 @@ src/
     speedmatch/
     patternmemory/
     focusgrid/
+    numbermatch/
     storage/
       persistence.ts
 
@@ -109,7 +110,7 @@ src/
 
 ## Juegos Disponibles
 
-Actualmente hay 6 juegos habilitados:
+Actualmente hay 7 juegos habilitados:
 
 - Sudoku
 - Memory
@@ -117,8 +118,22 @@ Actualmente hay 6 juegos habilitados:
 - Speed Match
 - Pattern Memory
 - Focus Grid
+- Number Match
 
 Todos están registrados en `src/games/registry.ts` y expuestos en navegación en `src/app/AppNavigator.tsx`.
+
+Estado de integración en daily:
+
+- El circuito diario sigue siendo de 3 etapas, con 1 juego por familia cognitiva (`speed`, `memory`, `logic`).
+- `Number Match` ya está habilitado dentro del pool diario en la familia `logic`.
+
+### Speed Match: diferencias reales por dificultad
+
+- `principiante`: 3 símbolos, 50% de match, 900 ms entre estímulos, máximo 12 fallos.
+- `avanzado`: 4 símbolos, 42% de match, 780 ms, máximo 11 fallos.
+- `experto`: 5 símbolos, 34% de match, 670 ms, máximo 10 fallos.
+- `maestro`: 6 símbolos, 27% de match, 560 ms, máximo 9 fallos.
+- `gran_maestro`: 7 símbolos, 20% de match, 470 ms, máximo 8 fallos.
 
 ## Daily Challenge (Estado Real)
 
@@ -166,7 +181,7 @@ Claves de persistencia activas:
 - Perfil: XP, nivel, liga, NeuroScore, dificultad preferida por juego.
 - Daily: estado del circuito diario, etapas y recompensa reclamada.
 - Stats: métricas acumuladas por juego.
-- Estados de sesión por juego: sudoku, memory, mentalmath, speedmatch, patternmemory, focusgrid.
+- Estados de sesión por juego: sudoku, memory, mentalmath, speedmatch, patternmemory, focusgrid, numbermatch.
 - Preferencias de notificaciones y programación local de recordatorio.
 
 ## Observabilidad Y Errores
@@ -226,6 +241,13 @@ Manifest fuente principal (`android/app/src/main/AndroidManifest.xml`):
 
 En merge de release tambien aparecen permisos transitivos de librerias (por ejemplo notificaciones, secure storage y utilidades de runtime Android). Esos permisos deben revisarse contra el artefacto final antes de publicar.
 
+Nota tecnica sobre manifest y backup rules:
+
+- `AndroidManifest.xml` referencia `@xml/secure_store_backup_rules` y `@xml/secure_store_data_extraction_rules`.
+- Esos XML no estan en fuente bajo `android/app/src/main/res/xml` en este repo.
+- Hipotesis verificada por build previo: se inyectan durante el proceso de build por dependencias/plugins de Expo Secure Store.
+- Verificacion manual recomendada: inspeccionar el manifest mergeado final y el APK/AAB generado.
+
 ### Checklist Minimo Antes De Subir A Play Store
 
 1. Definir y publicar URL final de politica de privacidad (legal revisada).
@@ -279,6 +301,46 @@ Estas áreas están vivas en el código y conviene conocerlas al entrar:
 - La app depende de estado local; al reinstalar se pierde progreso.
 - Cobertura de tests enfocada en dominio; UI no tiene suite de tests automatizada dedicada.
 
+## Estado de tests (baseline estable)
+
+- Suite actual: `src/**/*.test.ts` con Vitest.
+- Cobertura de dominio: economy, neuroscore, xp, seasonPoints, streak, daily, leaderboard.
+- Cobertura de modulos delicados agregada: `sessionCompletion` y `profile`.
+- Estado esperado tras estabilizacion: `npm run test:run` en verde y `npx tsc --noEmit` sin errores.
+
+## Baseline estable actual
+
+Estado del proyecto:
+
+- Base funcional estable para continuar desarrollo incremental sin cambios de arquitectura.
+- Flujo core daily/sessionCompletion endurecido con regresion en tests.
+- Documentacion principal alineada al estado real del producto (7 juegos; daily con Number Match habilitado en pool).
+
+Tests en verde:
+
+- Suite Vitest (`src/**/*.test.ts`) en verde.
+- Typecheck TypeScript (`npx tsc --noEmit`) en verde.
+
+Limitaciones conocidas:
+
+- Sin backend ni sincronizacion cloud.
+- Leaderboard semanal local/simulado.
+- El daily sigue limitado a 3 etapas por diseno (una por familia), aunque Number Match ya entra en la familia logic.
+- Sin suite automatizada dedicada para UI end-to-end.
+
+Validaciones manuales pendientes:
+
+- Generar release Android final y revisar manifest mergeado real del artefacto.
+- Verificar signing final con credenciales `NEUROFIT_UPLOAD_*`.
+- Ejecutar smoke test funcional (daily, progreso, leaderboard, notificaciones, reset).
+
+Riesgos abiertos conocidos:
+
+- `clean assembleRelease` puede fallar en clean nativo (`externalNativeBuildCleanDebug`) con New Architecture.
+- Referencias a `@xml/secure_store_backup_rules` y `@xml/secure_store_data_extraction_rules` dependen de inyeccion en build final; verificar manualmente en artefacto release.
+
+Checklist tecnico operativo para release y smoke test: `BASELINE_RELEASE_CHECKLIST.md`.
+
 ## Ejecutar El Proyecto
 
 Requisitos:
@@ -308,6 +370,9 @@ npm run web
 
 # Tests de dominio
 npm run test:run
+
+# Tests en watch
+npm test
 
 # Typecheck
 npx tsc --noEmit

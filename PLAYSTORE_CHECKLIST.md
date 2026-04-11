@@ -4,6 +4,10 @@ Last updated: 2026-03-13
 
 This checklist is a practical release baseline. It is not legal advice.
 
+Technical companion checklist:
+
+- `BASELINE_RELEASE_CHECKLIST.md` (build/release, manifest verification, smoke test y roadmap inmediato).
+
 ## 1. Product Truth Alignment
 
 Current product reality:
@@ -66,11 +70,16 @@ Short description candidate:
 
 Full description baseline points:
 
-- 6 juegos cognitivos (memoria, logica, velocidad y atencion)
+- 7 juegos cognitivos (memoria, logica, velocidad y atencion)
 - Reto diario por etapas
 - Progreso, racha y niveles en el dispositivo
 - Ranking semanal local simulado por liga
 - Ajustes de feedback y recordatorios diarios
+
+Product note:
+
+- Number Match esta disponible en modo normal y puede aparecer en reto diario.
+- El circuito diario mantiene 3 etapas (1 por familia cognitiva).
 
 Avoid in listing text:
 

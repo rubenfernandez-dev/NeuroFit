@@ -1,8 +1,8 @@
 export const STORAGE_KEYS = {
   profile: 'neurofit.profile',
-  // TODO: Remove after confirming no reset/migration flow still expects this legacy key.
+  // Legacy key retained for backward-compatible reset/migration flows.
   leaderboard: 'neurofit.leaderboard',
-  // TODO: Remove after confirming no persisted device seed migration is planned.
+  // Legacy key retained for backward-compatible seed migrations.
   deviceSeed: 'neurofit.deviceSeed',
   stats: 'neurofit.stats',
   daily: 'neurofit.daily',

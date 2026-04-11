@@ -46,6 +46,8 @@ type ResultSummary = {
 };
 
 const TILE_IDS: TileId[] = [0, 1, 2, 3];
+const CORRECT_TAP_BONUS_SEC = 8;
+const MAX_TIME_BONUS_CAP_SEC = 120;
 
 function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
   if (isDaily && typeof dailySeed === 'number') {
@@ -499,6 +501,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       if (correctTap) {
         void playSuccessFeedback();
         setCorrectTaps((prev) => prev + 1);
+        setTimeLeft((prev) => Math.min(config.totalSeconds + MAX_TIME_BONUS_CAP_SEC, prev + CORRECT_TAP_BONUS_SEC));
         if (reactionDelta > 0) {
           setReactionAccumMs((prev) => prev + reactionDelta);
           setReactionSamples((prev) => prev + 1);
@@ -585,6 +588,9 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
             Mejor secuencia: {maxSequence} · Precisión: {accuracy}% · RT medio: {reactionTimeAvg} ms
+          </Text>
+          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
+            Bono: +{CORRECT_TAP_BONUS_SEC}s por acierto
           </Text>
         </Card>
 

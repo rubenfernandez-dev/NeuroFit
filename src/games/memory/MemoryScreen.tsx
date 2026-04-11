@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { buildDeck, getMemoryDifficultyConfig } from './logic/deck';
+import { applyMemoryAttempt, computeMemoryRewardScore } from './logic/scoring';
 import MemoryCard from './components/MemoryCard';
 import { clearMemoryState, getMemoryState, saveMemoryState } from './storage/memoryState';
 import Card from '../../shared/ui/Card';
@@ -22,6 +23,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
 type ResultSummary = {
   score: number;
+  rewardScore: number;
+  bestStreak: number;
+  mismatches: number;
   earnedXp: number;
   earnedSp: number;
   elapsedMs: number;
@@ -38,6 +42,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
   const [flipped, setFlipped] = useState<number[]>([]);
   const [matched, setMatched] = useState<number[]>([]);
   const [attempts, setAttempts] = useState(0);
+  const [mismatches, setMismatches] = useState(0);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [bestStreak, setBestStreak] = useState(0);
+  const [roundScore, setRoundScore] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [lockInput, setLockInput] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
@@ -116,6 +124,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
         setFlipped(saved.flipped);
         setMatched(saved.matched);
         setAttempts(saved.attempts);
+        setMismatches(saved.mismatches ?? 0);
+        setCurrentStreak(saved.currentStreak ?? 0);
+        setBestStreak(saved.bestStreak ?? 0);
+        setRoundScore(saved.roundScore ?? 0);
         setElapsedMs(saved.elapsedMs);
         setSessionStarted(Boolean(saved.sessionStarted));
         setDidFinish(Boolean(saved.didFinish));
@@ -134,6 +146,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setFlipped([]);
       setMatched([]);
       setAttempts(0);
+      setMismatches(0);
+      setCurrentStreak(0);
+      setBestStreak(0);
+      setRoundScore(0);
       setElapsedMs(0);
       setDidFinish(false);
       setResultVisible(false);
@@ -159,8 +175,24 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!cards.length) return;
-    saveMemoryState({ cards, flipped, matched, attempts, elapsedMs, difficulty, isDaily, dailyDateISO, seed: dailySeed, sessionStarted, didFinish });
-  }, [cards, flipped, matched, attempts, elapsedMs, difficulty, isDaily, dailyDateISO, dailySeed, sessionStarted, didFinish]);
+    saveMemoryState({
+      cards,
+      flipped,
+      matched,
+      attempts,
+      mismatches,
+      currentStreak,
+      bestStreak,
+      roundScore,
+      elapsedMs,
+      difficulty,
+      isDaily,
+      dailyDateISO,
+      seed: dailySeed,
+      sessionStarted,
+      didFinish,
+    });
+  }, [cards, flipped, matched, attempts, mismatches, currentStreak, bestStreak, roundScore, elapsedMs, difficulty, isDaily, dailyDateISO, dailySeed, sessionStarted, didFinish]);
 
   const isComplete = useMemo(() => cards.length > 0 && matched.length === cards.length, [cards.length, matched.length]);
 
@@ -169,14 +201,20 @@ export default function MemoryScreen({ route, navigation }: Props) {
     const finalize = async () => {
       setFinishing(true);
       setDidFinish(true);
-      const scoreRaw = Math.max(0, cards.length * 10 - attempts * 3);
-      const score = Math.max(0, Math.min(100, Math.round(scoreRaw)));
+      const totalPairs = cards.length / 2;
+      const rewardScore = computeMemoryRewardScore({
+        totalPairs,
+        attempts,
+        matches: totalPairs,
+        bestStreak,
+        rawScore: roundScore,
+      });
       await trackWin({
         gameId: 'memory',
         mode: isDaily ? 'daily' : 'normal',
         difficulty,
         durationMs: elapsedMs,
-        score,
+        score: rewardScore,
       });
       const completionResult = await completeGameSession({
         gameId: 'memory',
@@ -186,8 +224,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
         stageIndex,
         metrics: {
           durationMs: elapsedMs,
-          score,
-          mistakes: attempts,
+          score: rewardScore,
+          mistakes: mismatches,
         },
       });
 
@@ -207,7 +245,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setSessionStarted(false);
       void playVictoryFeedback();
       setResultSummary({
-        score,
+        score: roundScore,
+        rewardScore,
+        bestStreak,
+        mismatches,
         earnedXp: completionResult.earnedXp,
         earnedSp: completionResult.earnedSp,
         elapsedMs,
@@ -217,7 +258,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setFinishing(false);
     };
     finalize();
-  }, [isComplete, finishing, didFinish, cards.length, attempts, difficulty, elapsedMs, isDaily]);
+  }, [isComplete, finishing, didFinish, cards.length, attempts, bestStreak, difficulty, elapsedMs, isDaily, mismatches, roundScore]);
 
   const onCardPress = (index: number) => {
     if (dailyBlockedReason) return;
@@ -226,9 +267,25 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setFlipped(nextFlipped);
 
     if (nextFlipped.length === 2) {
-      setAttempts((prev) => prev + 1);
       const [a, b] = nextFlipped;
       const match = cards[a].pairId === cards[b].pairId;
+      const nextRound = applyMemoryAttempt(
+        {
+          score: roundScore,
+          streak: currentStreak,
+          bestStreak,
+          matches: matched.length / 2,
+          mismatches,
+          attempts,
+        },
+        match,
+      );
+
+      setAttempts(nextRound.attempts);
+      setMismatches(nextRound.mismatches);
+      setCurrentStreak(nextRound.streak);
+      setBestStreak(nextRound.bestStreak);
+      setRoundScore(nextRound.score);
 
       if (match) {
         void playSuccessFeedback();
@@ -258,6 +315,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setFlipped([]);
     setMatched([]);
     setAttempts(0);
+    setMismatches(0);
+    setCurrentStreak(0);
+    setBestStreak(0);
+    setRoundScore(0);
     setElapsedMs(0);
     setDidFinish(false);
     setResultVisible(false);
@@ -278,6 +339,9 @@ export default function MemoryScreen({ route, navigation }: Props) {
         </View>
         <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>
           Tiempo: {msToClock(elapsedMs)} · Intentos: {attempts}
+        </Text>
+        <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
+          Puntos: {roundScore} · Racha: x{Math.max(1, currentStreak)} · Fallos: {mismatches}
         </Text>
       </Card>
 
@@ -313,8 +377,11 @@ export default function MemoryScreen({ route, navigation }: Props) {
       title="¡Memory completado!"
       subtitle="Gran memoria visual, sigue sumando racha."
       metrics={[
-        { label: 'Score', value: resultSummary?.score ?? 0 },
+        { label: 'Score ronda', value: resultSummary?.score ?? 0 },
+        { label: 'Score recompensa', value: resultSummary?.rewardScore ?? 0 },
+        { label: 'Mejor racha', value: resultSummary?.bestStreak ?? 0 },
         { label: 'Intentos', value: resultSummary?.attempts ?? 0 },
+        { label: 'Fallos', value: resultSummary?.mismatches ?? 0 },
         { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
         { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
         { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },

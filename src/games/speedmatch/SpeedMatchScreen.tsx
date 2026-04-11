@@ -3,6 +3,7 @@ import { Alert, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
+import { computeSpeedMatchRewardScore, evaluateSpeedMatchWin, getSpeedMatchConfig } from './logic';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
@@ -14,7 +15,7 @@ import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { clearSpeedMatchState, getSpeedMatchState, saveSpeedMatchState } from './storage/speedmatchState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
@@ -26,25 +27,11 @@ type ResultSummary = {
   correct: number;
   mistakes: number;
   score: number;
+  won: boolean;
   accuracyPct: number;
 };
 
 const SYMBOL_LIBRARY = ['●', '■', '▲', '◆', '★', '✚', '⬢', '◉', '☼'];
-type SpeedMatchDifficultyConfig = {
-  durationSec: number;
-  symbolCount: number;
-  matchProbability: number;
-  stimulusIntervalMs: number;
-};
-
-const SPEEDMATCH_CONFIG: Record<Difficulty, SpeedMatchDifficultyConfig> = {
-  // La dificultad escala por menos matches, mas simbolos y menor intervalo visual.
-  principiante: { durationSec: 60, symbolCount: 3, matchProbability: 0.5, stimulusIntervalMs: 900 },
-  avanzado: { durationSec: 60, symbolCount: 4, matchProbability: 0.42, stimulusIntervalMs: 780 },
-  experto: { durationSec: 56, symbolCount: 5, matchProbability: 0.34, stimulusIntervalMs: 670 },
-  maestro: { durationSec: 52, symbolCount: 6, matchProbability: 0.27, stimulusIntervalMs: 560 },
-  gran_maestro: { durationSec: 48, symbolCount: 7, matchProbability: 0.2, stimulusIntervalMs: 470 },
-};
 
 function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
   if (isDaily && typeof dailySeed === 'number') {
@@ -73,7 +60,7 @@ function nextSymbolFrom(
   return pickOne(alternatives.length > 0 ? alternatives : pool, rng);
 }
 
-function createSession(symbolPool: string[], config: SpeedMatchDifficultyConfig, sessionSeed: number) {
+function createSession(symbolPool: string[], config: ReturnType<typeof getSpeedMatchConfig>, sessionSeed: number) {
   const previousSymbol = pickInitialSymbol(symbolPool, sessionSeed, 0);
   const currentSymbol = nextSymbolFrom(previousSymbol, symbolPool, sessionSeed, 1, config.matchProbability);
 
@@ -96,7 +83,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
-  const config = SPEEDMATCH_CONFIG[difficulty];
+  const config = getSpeedMatchConfig(difficulty);
   const symbolPool = useMemo(() => SYMBOL_LIBRARY.slice(0, config.symbolCount), [config.symbolCount]);
 
   const [previousSymbol, setPreviousSymbol] = useState('');
@@ -264,22 +251,30 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     const elapsedMs = Math.max(0, (config.durationSec - timeLeft) * 1000);
     const totalAnswers = correct + mistakes;
     const accuracyPct = Math.round((correct / Math.max(1, totalAnswers)) * 100);
-    const rewardScore = Math.max(0, Math.min(100, accuracyPct));
-
-    await trackWin({
-      gameId: 'speedmatch',
-      mode: isDaily ? 'daily' : 'normal',
-      difficulty,
-      durationMs: elapsedMs,
-      score: rewardScore,
+    const rewardScore = computeSpeedMatchRewardScore({
+      correct,
       mistakes,
+      elapsedSec: Math.max(1, Math.round(elapsedMs / 1000)),
+      difficulty,
     });
+    const won = evaluateSpeedMatchWin({ correct, mistakes, difficulty });
+
+    if (won) {
+      await trackWin({
+        gameId: 'speedmatch',
+        mode: isDaily ? 'daily' : 'normal',
+        difficulty,
+        durationMs: elapsedMs,
+        score: rewardScore,
+        mistakes,
+      });
+    }
 
     const completionResult = await completeGameSession({
       gameId: 'speedmatch',
       difficulty,
       mode: isDaily ? 'daily' : 'normal',
-      won: true,
+      won,
       stageIndex,
       metrics: {
         durationMs: elapsedMs,
@@ -290,7 +285,8 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     });
 
     if (isDaily && completionResult.dailyCompletion) {
-      void playVictoryFeedback();
+      if (won) void playVictoryFeedback();
+      else void playDefeatFeedback();
       await clearSpeedMatchState();
       setSessionStarted(false);
       setFinishing(false);
@@ -303,14 +299,16 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
     await clearSpeedMatchState();
     setSessionStarted(false);
-    void playVictoryFeedback();
+    if (won) void playVictoryFeedback();
+    else void playDefeatFeedback();
     setResultSummary({
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
       elapsedMs,
       correct,
       mistakes,
-      score,
+      score: rewardScore,
+      won,
       accuracyPct,
     });
     setResultVisible(true);
@@ -322,6 +320,12 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       finishSession();
     }
   }, [timeLeft, didFinish]);
+
+  useEffect(() => {
+    if (!didFinish && mistakes >= config.maxMistakes) {
+      finishSession();
+    }
+  }, [config.maxMistakes, didFinish, mistakes]);
 
   const answer = (isMatchChoice: boolean) => {
     if (dailyBlockedReason || didFinish || !sessionStarted || inputLocked) return;
@@ -394,6 +398,9 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
             Score: {score} · Aciertos: {correct} · Fallos: {mistakes} · Precisión: {accuracyPct}%
           </Text>
+          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
+            Máx. fallos: {config.maxMistakes}
+          </Text>
         </Card>
 
         {dailyBlockedReason ? (
@@ -427,9 +434,9 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       <GameResultModal
         visible={resultVisible}
         onRequestClose={() => setResultVisible(false)}
-        variant="victory"
-        title="¡Sesión completada!"
-        subtitle="Buen foco y velocidad de decisión."
+        variant={resultSummary?.won ? 'victory' : 'defeat'}
+        title={resultSummary?.won ? '¡Sesión completada!' : 'Sesión finalizada'}
+        subtitle={resultSummary?.won ? 'Buen foco y velocidad de decisión.' : 'No se alcanzó el umbral mínimo de rendimiento.'}
         metrics={[
           { label: 'Score', value: resultSummary?.score ?? 0 },
           { label: 'Aciertos', value: resultSummary?.correct ?? 0 },

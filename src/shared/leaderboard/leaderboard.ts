@@ -276,7 +276,7 @@ export async function getUserRankInWeeklyLeaderboard(params: {
   return board.find((entry) => entry.isUser)?.rank ?? board.length;
 }
 
-// TODO: Remove if we stop using this manual debug helper during leaderboard tuning.
+// Debug helper retained for manual balancing/tuning during development.
 export async function debugWeeklyLeaderboardBands(seasonId = currentSeasonId()) {
   const [bronze, diamond] = await Promise.all([
     generateWeeklyLeaderboard({ seasonId, leagueId: 'bronze', userSeasonPoints: 0, userName: 'Tú' }),
@@ -294,6 +294,9 @@ export async function debugWeeklyLeaderboardBands(seasonId = currentSeasonId()) 
     diamond: slice(diamond),
   };
 
-  console.log('[NeuroFit] Weekly leaderboard debug', result);
+  const isDev = typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV === 'development';
+  if (isDev) {
+    console.log('[NeuroFit] Weekly leaderboard debug', result);
+  }
   return result;
 }

@@ -8,18 +8,25 @@
 
 type TelemetryPayload = Record<string, unknown>;
 
+function isDevRuntime(): boolean {
+  if (typeof __DEV__ !== 'undefined') {
+    return __DEV__;
+  }
+  return process.env.NODE_ENV === 'development';
+}
+
 function fmt(name: string, payload?: TelemetryPayload): string {
   return JSON.stringify({ ts: new Date().toISOString(), event: name, ...(payload ?? {}) });
 }
 
 export function logEvent(name: string, payload?: TelemetryPayload): void {
-  if (__DEV__) {
+  if (isDevRuntime()) {
     console.log('[telemetry]', fmt(name, payload));
   }
 }
 
 export function logWarn(name: string, payload?: TelemetryPayload): void {
-  if (__DEV__) {
+  if (isDevRuntime()) {
     console.warn('[telemetry:warn]', fmt(name, payload));
   }
 }

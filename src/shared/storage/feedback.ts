@@ -59,6 +59,8 @@ export async function updateFeedbackPrefs(partial: Partial<FeedbackPrefs>): Prom
   return next;
 }
 
+// Legacy helper kept for compatibility with potential external tooling/scripts.
+// Prefer updateFeedbackPrefs for granular state transitions.
 export async function resetFeedbackPrefs() {
   await deleteItem(STORAGE_KEYS.feedback);
 }
