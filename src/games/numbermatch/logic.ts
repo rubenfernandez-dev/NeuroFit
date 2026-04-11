@@ -55,6 +55,51 @@ export function canValuesMatch(a: number, b: number): boolean {
   return a === b || a + b === 10;
 }
 
+function buildValueCounts(board: Array<number | null>): number[] {
+  const counts = Array.from({ length: 10 }, () => 0);
+  board.forEach((value) => {
+    if (typeof value === 'number' && value >= 1 && value <= 9) counts[value] += 1;
+  });
+  return counts;
+}
+
+function buildCoherentLineValues(board: Array<number | null>, count: number): number[] {
+  const counts = buildValueCounts(board);
+  const baseValues = Array.from({ length: 9 }, (_, index) => index + 1).filter((value) => counts[value] > 0);
+  if (baseValues.length === 0 || count <= 0) return [];
+
+  const preferred: number[] = [];
+  baseValues.forEach((value) => {
+    preferred.push(value);
+    const complement = 10 - value;
+    if (complement >= 1 && complement <= 9) preferred.push(complement);
+    if (counts[value] >= 2) preferred.push(value);
+  });
+
+  const line: number[] = [];
+  for (let i = 0; i < count; i += 1) {
+    line.push(preferred[i % preferred.length]);
+  }
+  return line;
+}
+
+function findConnectableEmptyPair(
+  board: Array<number | null>,
+  emptyIndices: number[],
+  cols: number,
+): [number, number] | null {
+  for (let i = 0; i < emptyIndices.length; i += 1) {
+    for (let j = i + 1; j < emptyIndices.length; j += 1) {
+      const a = emptyIndices[i];
+      const b = emptyIndices[j];
+      if (isValidMatchConnection(board, a, b, cols)) {
+        return [a, b];
+      }
+    }
+  }
+  return null;
+}
+
 function noNumbersBetweenInRow(board: Array<number | null>, indexA: number, indexB: number, cols: number): boolean {
   const a = indexToRC(indexA, cols);
   const b = indexToRC(indexB, cols);
@@ -152,9 +197,13 @@ export function hasAnyValidMove(board: Array<number | null>, cols: number): bool
   return false;
 }
 
-export function addLineFromRemaining(board: Array<number | null>, addLineCount: number): { nextBoard: Array<number | null>; added: number } {
-  const remaining = board.filter((value): value is number => value !== null);
-  if (remaining.length === 0 || addLineCount <= 0) {
+export function addLineFromRemaining(
+  board: Array<number | null>,
+  addLineCount: number,
+  cols?: number,
+): { nextBoard: Array<number | null>; added: number } {
+  const existing = board.filter((value): value is number => value !== null);
+  if (existing.length === 0 || addLineCount <= 0) {
     return { nextBoard: board, added: 0 };
   }
 
@@ -164,9 +213,27 @@ export function addLineFromRemaining(board: Array<number | null>, addLineCount: 
     .filter((entry) => entry.value === null)
     .map((entry) => entry.index);
 
+  let writeCursor = 0;
   const toAdd = Math.min(addLineCount, emptyIndices.length);
-  for (let i = 0; i < toAdd; i += 1) {
-    nextBoard[emptyIndices[i]] = remaining[i % remaining.length];
+
+  // Seed one guaranteed connectable pair when possible to avoid artificial dead states.
+  if (typeof cols === 'number' && toAdd >= 2) {
+    const pair = findConnectableEmptyPair(nextBoard, emptyIndices, cols);
+    if (pair) {
+      const [a, b] = pair;
+      const pairValue = existing[0];
+      nextBoard[a] = pairValue;
+      nextBoard[b] = pairValue;
+      writeCursor = 2;
+      emptyIndices.splice(emptyIndices.indexOf(a), 1);
+      emptyIndices.splice(emptyIndices.indexOf(b), 1);
+    }
+  }
+
+  const remainingSlots = Math.max(0, toAdd - writeCursor);
+  const coherentValues = buildCoherentLineValues(board, remainingSlots);
+  for (let i = 0; i < remainingSlots; i += 1) {
+    nextBoard[emptyIndices[i]] = coherentValues[i] ?? existing[i % existing.length];
   }
 
   return { nextBoard, added: toAdd };
@@ -184,12 +251,14 @@ export function computeRewardScoreNumberMatch(input: {
   invalidMatches: number;
   bestCombo: number;
   boardClearedPercent: number;
+  linesUsed?: number;
 }): number {
   const validMatchesFactor = clamp(input.validMatches / 18, 0, 1) * 100;
   const boardFactor = clamp(input.boardClearedPercent, 0, 100);
   const comboFactor = clamp(input.bestCombo / 7, 0, 1) * 100;
-  // Score grows with successful play time, so it works as a survival proxy.
+  // Score grows with successful combos and valid matches.
   const survivalFactor = clamp(input.score / 260, 0, 1) * 100;
+  const linePressure = clamp((input.linesUsed ?? 0) / 12, 0, 1) * 100;
 
   // Light penalty model: invalid attempts reduce efficiency, but never dominate reward.
   const weightedAttempts = input.validMatches + input.invalidMatches * 0.35 + 1;
@@ -197,10 +266,23 @@ export function computeRewardScoreNumberMatch(input: {
 
   const weighted =
     validMatchesFactor * 0.25 +
-    boardFactor * 0.35 +
-    survivalFactor * 0.2 +
+    boardFactor * 0.33 +
+    survivalFactor * 0.18 +
     comboFactor * 0.1 +
-    executionFactor * 0.1;
+    executionFactor * 0.1 +
+    (100 - linePressure) * 0.04;
 
   return clamp(Math.round(weighted), 0, 100);
+}
+
+export function evaluateNumberMatchWin(input: {
+  boardClearedPercent: number;
+  validMatches: number;
+  invalidMatches: number;
+}): boolean {
+  const efficientEnough = input.validMatches >= 6;
+  const clearedEnough = input.boardClearedPercent >= 80;
+  const weightedAttempts = input.validMatches + input.invalidMatches * 0.5 + 1;
+  const execution = (input.validMatches / weightedAttempts) * 100;
+  return clearedEnough && efficientEnough && execution >= 40;
 }

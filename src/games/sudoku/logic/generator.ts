@@ -1,16 +1,9 @@
 import { Difficulty } from '../../types';
 import { SudokuPuzzle } from '../model/types';
 import { createSeededRng } from '../../../shared/utils/random';
+import { SUDOKU_CLUES } from './difficulty';
 
 const SOLUTION = '534678912672195348198342567859761423426853791713924856961537284287419635345286179';
-
-const cluesByDifficulty: Record<Difficulty, number> = {
-  principiante: 46,
-  avanzado: 38,
-  experto: 31,
-  maestro: 28,
-  gran_maestro: 25,
-};
 
 function toDigits(serialized: string): number[] {
   return serialized.split('').map((value) => Number(value));
@@ -38,7 +31,7 @@ function makeMask(clues: number, rng: () => number): boolean[] {
 
 export function getPuzzle(difficulty: Difficulty, seed?: number): SudokuPuzzle {
   const rng = typeof seed === 'number' ? createSeededRng(seed) : Math.random;
-  const clues = cluesByDifficulty[difficulty];
+  const clues = SUDOKU_CLUES[difficulty];
   const mask = makeMask(clues, rng);
 
   return {

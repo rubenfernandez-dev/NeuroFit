@@ -20,6 +20,7 @@ import {
   computeBoardClearedPercent,
   computeRewardScoreNumberMatch,
   createInitialBoard,
+  evaluateNumberMatchWin,
   getNumberMatchConfig,
   hasAnyValidMove,
   isValidMatchConnection,
@@ -41,10 +42,12 @@ type FeedbackPair = {
 type ResultSummary = {
   elapsedMs: number;
   rewardScore: number;
+  won: boolean;
   score: number;
   validMatches: number;
   invalidMatches: number;
   bestCombo: number;
+  linesUsed: number;
   boardClearedPercent: number;
   xpGained: number;
   spGained: number;
@@ -78,9 +81,10 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
   const [invalidMatches, setInvalidMatches] = useState(0);
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
+  const [linesUsed, setLinesUsed] = useState(0);
   const [lastValidAtMs, setLastValidAtMs] = useState(0);
 
-  const [timeLeft, setTimeLeft] = useState(config.totalSeconds);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [phase, setPhase] = useState<Phase>('idle');
   const [sessionStarted, setSessionStarted] = useState(false);
   const [didFinish, setDidFinish] = useState(false);
@@ -118,8 +122,9 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     setInvalidMatches(0);
     setCombo(0);
     setBestCombo(0);
+    setLinesUsed(0);
     setLastValidAtMs(0);
-    setTimeLeft(config.totalSeconds);
+    setElapsedSec(0);
     setPhase('idle');
     setSessionStarted(true);
     setDidFinish(false);
@@ -179,7 +184,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
         setInvalidMatches(saved.invalidMatches);
         setCombo(saved.combo);
         setBestCombo(saved.bestCombo);
-        setTimeLeft(saved.timeLeft);
+        setLinesUsed(saved.linesUsed);
+        setElapsedSec(saved.elapsedSec);
         setSessionSeed(saved.sessionSeed);
         setSessionStarted(Boolean(saved.started));
         setDidFinish(Boolean(saved.didFinish));
@@ -208,7 +214,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (!sessionStarted || didFinish || !!dailyBlockedReason || phase !== 'playing') return;
     const timer = setInterval(() => {
-      setTimeLeft((prev) => Math.max(0, prev - 1));
+      setElapsedSec((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(timer);
@@ -225,7 +231,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
         invalidMatches,
         combo,
         bestCombo,
-        timeLeft,
+        linesUsed,
+        elapsedSec,
         sessionSeed,
         started: sessionStarted,
         didFinish,
@@ -241,7 +248,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     const p = numberPersistRef.current;
     if (!p) return;
     saveNumberMatchState(p);
-  }, [board, selectedIndex, score, validMatches, invalidMatches, combo, bestCombo, phase, difficulty, isDaily, dailyDateISO, dailySeed, sessionStarted, didFinish, timeLeft, sessionSeed, startedAtISO]);
+  }, [board, selectedIndex, score, validMatches, invalidMatches, combo, bestCombo, linesUsed, phase, difficulty, isDaily, dailyDateISO, dailySeed, sessionStarted, didFinish, elapsedSec, sessionSeed, startedAtISO]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -263,14 +270,20 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     setPhase('finished');
     clearFeedback();
 
-    const elapsedMs = Math.max(0, (config.totalSeconds - timeLeft) * 1000);
+    const elapsedMs = Math.max(0, elapsedSec * 1000);
     const boardClearedPercent = computeBoardClearedPercent(board);
+    const won = evaluateNumberMatchWin({
+      boardClearedPercent,
+      validMatches,
+      invalidMatches,
+    });
     const rewardScore = computeRewardScoreNumberMatch({
       score,
       validMatches,
       invalidMatches,
       bestCombo,
       boardClearedPercent,
+      linesUsed,
     });
 
     await trackNumberMatchResult({
@@ -281,14 +294,14 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       bestCombo,
       boardClearedPercent,
       durationMs: elapsedMs,
-      won: boardClearedPercent >= 85,
+      won,
     });
 
     const completionResult = await completeGameSession({
       gameId: 'numbermatch',
       difficulty,
       mode: isDaily ? 'daily' : 'normal',
-      won: boardClearedPercent >= 85,
+      won,
       stageIndex,
       metrics: {
         durationMs: elapsedMs,
@@ -315,7 +328,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       performance,
     };
 
-    if (boardClearedPercent >= 85) void playVictoryFeedback();
+    if (won) void playVictoryFeedback();
     else void playDefeatFeedback();
 
     if (isDaily && completionResult.dailyCompletion) {
@@ -334,10 +347,12 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     setResultSummary({
       elapsedMs,
       rewardScore,
+      won,
       score,
       validMatches,
       invalidMatches,
       bestCombo,
+      linesUsed,
       boardClearedPercent,
       xpGained: completionResult.earnedXp,
       spGained: completionResult.earnedSp,
@@ -346,12 +361,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     });
     setResultVisible(true);
     setFinishing(false);
-  }, [bestCombo, board, clearFeedback, config.totalSeconds, didFinish, difficulty, finishing, invalidMatches, isDaily, navigation, score, stageIndex, startedAtISO, timeLeft, validMatches]);
-
-  useEffect(() => {
-    if (!sessionStarted || didFinish || timeLeft > 0 || phase !== 'playing') return;
-    finishSession('timeout');
-  }, [didFinish, finishSession, phase, sessionStarted, timeLeft]);
+  }, [bestCombo, board, clearFeedback, didFinish, difficulty, elapsedSec, finishing, invalidMatches, isDaily, linesUsed, navigation, score, stageIndex, startedAtISO, validMatches]);
 
   useEffect(() => {
     if (!sessionStarted || phase !== 'playing' || didFinish) return;
@@ -422,13 +432,14 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
   const addLine = useCallback(() => {
     if (dailyBlockedReason || didFinish || finishing || phase !== 'playing') return;
-    const result = addLineFromRemaining(board, config.addLineCount);
+    const result = addLineFromRemaining(board, config.addLineCount, config.cols);
     if (result.added <= 0) {
       finishSession('board_full');
       return;
     }
 
     setBoard(result.nextBoard);
+    setLinesUsed((prev) => prev + 1);
     setSelectedIndex(null);
     setCombo(0);
 
@@ -464,10 +475,10 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
             />
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Tiempo: {msToClock(timeLeft * 1000)} · Puntaje: {score} · Combo: x{Math.max(1, combo)}
+            Cronometro: {msToClock(elapsedSec * 1000)} · Puntaje: {score} · Combo: x{Math.max(1, combo)}
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Matches validos: {validMatches} · Invalidos: {invalidMatches} · Limpieza: {boardClearedPercent}%
+            Matches validos: {validMatches} · Invalidos: {invalidMatches} · Lineas: {linesUsed} · Limpieza: {boardClearedPercent}%
           </Text>
         </Card>
 
@@ -550,14 +561,15 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       <GameResultModal
         visible={resultVisible}
         onRequestClose={() => setResultVisible(false)}
-        variant={resultSummary && resultSummary.boardClearedPercent >= 85 ? 'victory' : 'defeat'}
-        title={resultSummary && resultSummary.boardClearedPercent >= 85 ? 'Muy bien jugado' : 'Sesion finalizada'}
+        variant={resultSummary?.won ? 'victory' : 'defeat'}
+        title={resultSummary?.won ? 'Muy bien jugado' : 'Sesion finalizada'}
         subtitle="Number Match"
         metrics={[
           { label: 'Score recompensa', value: resultSummary?.rewardScore ?? 0 },
           { label: 'Matches validos', value: resultSummary?.validMatches ?? 0 },
           { label: 'Matches invalidos', value: resultSummary?.invalidMatches ?? 0 },
           { label: 'Mejor combo', value: resultSummary?.bestCombo ?? 0 },
+          { label: 'Lineas usadas', value: resultSummary?.linesUsed ?? 0 },
           { label: 'Tablero despejado', value: `${resultSummary?.boardClearedPercent ?? 0}%` },
           { label: 'XP', value: resultSummary?.xpGained ?? 0 },
           { label: 'SP', value: resultSummary?.spGained ?? 0 },

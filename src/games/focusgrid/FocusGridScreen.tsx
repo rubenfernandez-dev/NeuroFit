@@ -11,7 +11,7 @@ import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { trackFocusGridResult, trackSessionStart } from '../../shared/storage/stats';
-import { buildShuffledGridNumbers, calcAccuracy, getFocusGridConfig } from './logic';
+import { applyFocusGridCorrectTimeBonus, buildShuffledGridNumbers, calcAccuracy, getFocusGridConfig } from './logic';
 import { FocusGridFinishReason, FocusGridGameResult } from './types';
 import { clearFocusGridState, getFocusGridState, saveFocusGridState } from './storage/focusGridState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
@@ -354,6 +354,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       if (value === nextExpected) {
         void playSuccessFeedback();
         setCorrectTaps((prev) => prev + 1);
+        setTimeLeft((prev) => applyFocusGridCorrectTimeBonus(prev, config.totalSeconds, 3, 90));
         applyTapFeedback({ type: 'correct', value });
 
         if (value >= totalCells) {

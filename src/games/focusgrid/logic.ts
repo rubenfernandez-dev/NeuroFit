@@ -59,6 +59,16 @@ export function calcAccuracy(correctTaps: number, totalTaps: number): number {
   return clamp(Math.round((correctTaps / totalTaps) * 100), 0, 100);
 }
 
+export function applyFocusGridCorrectTimeBonus(
+  timeLeftSec: number,
+  totalSecondsBase: number,
+  bonusSec = 3,
+  capExtraSec = 90,
+): number {
+  const cap = Math.max(1, totalSecondsBase + capExtraSec);
+  return clamp(timeLeftSec + bonusSec, 0, cap);
+}
+
 export function calculateFocusGridScore(input: {
   solvedCount: number;
   totalCells: number;

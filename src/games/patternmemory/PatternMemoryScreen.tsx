@@ -19,6 +19,7 @@ import {
   calculatePatternMemoryScore,
   createInitialSequence,
   createRoundRng,
+  evaluatePatternMemoryWin,
   getPatternMemoryConfig,
   isCorrectTap,
 } from './logic';
@@ -349,7 +350,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         reactionWorstMs: config.reactionWorstMs,
       });
       const performance = computePerformanceFromScore(score, difficulty);
-      const won = reason !== 'failed';
+      const won = evaluatePatternMemoryWin(reason);
       if (won) void playVictoryFeedback();
       else void playDefeatFeedback();
 

@@ -1,6 +1,7 @@
 import { Difficulty } from '../types';
 import { createSeededRng, randomInt, RNG } from '../../shared/utils/random';
 import { TileId } from './types';
+import { PatternMemoryFinishReason } from './types';
 
 export type PatternMemoryDifficultyConfig = {
   tileOnMs: number;
@@ -114,4 +115,8 @@ export function calculatePatternMemoryScore(input: {
 
   const weighted = sequenceScore * 0.6 + accuracyScore * 0.25 + reactionScore * 0.15;
   return clamp(Math.round(weighted), 0, 100);
+}
+
+export function evaluatePatternMemoryWin(reason: PatternMemoryFinishReason): boolean {
+  return reason === 'max_round';
 }

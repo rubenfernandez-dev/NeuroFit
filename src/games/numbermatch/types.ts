@@ -21,4 +21,4 @@ export type NumberMatchGameResult = {
   performance: number;
 };
 
-export type NumberMatchFinishReason = 'timeout' | 'manual' | 'board_full';
+export type NumberMatchFinishReason = 'manual' | 'board_full';

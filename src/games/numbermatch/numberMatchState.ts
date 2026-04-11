@@ -23,7 +23,8 @@ export type NumberMatchState = {
   invalidMatches: number;
   combo: number;
   bestCombo: number;
-  timeLeft: number;
+  linesUsed: number;
+  elapsedSec: number;
   sessionSeed: number;
   started: boolean;
   didFinish: boolean;
@@ -74,7 +75,8 @@ function normalizeNumberMatchState(parsed: Record<string, unknown>): NumberMatch
     invalidMatches: normalizeNonNegativeInt(parsed.invalidMatches),
     combo: normalizeNonNegativeInt(parsed.combo),
     bestCombo: normalizeNonNegativeInt(parsed.bestCombo),
-    timeLeft: normalizeNonNegativeInt(parsed.timeLeft),
+    linesUsed: normalizeNonNegativeInt(parsed.linesUsed),
+    elapsedSec: normalizeNonNegativeInt(parsed.elapsedSec),
     sessionSeed,
     started: Boolean(parsed.started),
     didFinish: Boolean(parsed.didFinish),

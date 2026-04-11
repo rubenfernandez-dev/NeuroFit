@@ -1,12 +1,13 @@
 # NeuroFit Play Store Checklist (Baseline)
 
-Last updated: 2026-03-13
+Last updated: 2026-04-11
 
 This checklist is a practical release baseline. It is not legal advice.
 
-Technical companion checklist:
+Technical companion documents:
 
-- `BASELINE_RELEASE_CHECKLIST.md` (build/release, manifest verification, smoke test y roadmap inmediato).
+- `BASELINE_RELEASE_CHECKLIST.md` (build/release, manifest verification, smoke test y roadmap inmediato)
+- `ANDROID_RELEASE_GUIDE.md` (guia operativa completa: build, firma, artefactos, validacion, subida a Play Console)
 
 ## 1. Product Truth Alignment
 
@@ -38,12 +39,13 @@ Before upload:
 
 ## 3. Android Permissions Review
 
-Manifest source declares:
+Manifest source declares (as of 2026-04-11):
 
-- INTERNET
-- VIBRATE
+- `INTERNET`
+- `VIBRATE`
+- `POST_NOTIFICATIONS` (declarado explicitamente en AndroidManifest.xml; tambien llega via expo-notifications merge)
 
-Merged release manifest can include additional transitive permissions from dependencies (notifications, secure-store stack, Android runtime integrations). Validate with final AAB before submission.
+Transitive permissions from dependencies can still appear in the merged manifest. Validate with `ANDROID_RELEASE_GUIDE.md` step 7 before upload.
 
 ## 4. Required Store Assets
 
