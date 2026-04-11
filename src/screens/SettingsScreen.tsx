@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppTheme } from '../shared/theme/theme';
 import Button from '../shared/ui/Button';
 import Card from '../shared/ui/Card';
@@ -313,7 +314,8 @@ export default function SettingsScreen() {
   const masterFeedbackEnabled = feedbackPrefs?.enabled ?? true;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg0 }}>
+      <ScrollView contentContainerStyle={{ padding: theme.spacing.lg, gap: theme.spacing.lg }}>
       {status ? (
         <Card variant={status.kind === 'success' ? 'success' : 'warning'}>
           <Text style={[theme.typography.bodySmall, { color: status.kind === 'success' ? theme.colors.green : theme.colors.red }]}>{status.text}</Text>
@@ -498,7 +500,8 @@ export default function SettingsScreen() {
           </View>
         </Card>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 

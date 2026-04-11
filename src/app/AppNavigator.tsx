@@ -76,6 +76,7 @@ export default function AppNavigator() {
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
+          headerShown: false,
           headerStyle: { backgroundColor: theme.colors.surface },
           headerTintColor: theme.colors.text,
           headerShadowVisible: false,
