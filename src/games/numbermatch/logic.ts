@@ -34,21 +34,83 @@ export function createInitialBoard(rows: number, cols: number, initialFilled: nu
   const cellCount = rows * cols;
   const safeFilled = clamp(Math.floor(initialFilled), 0, cellCount);
   const rng = createSeededRng(Math.max(1, Math.floor(seed)));
-  const board: Array<number | null> = Array.from({ length: cellCount }).map(() => null);
+  const emptyBoard: Array<number | null> = Array.from({ length: cellCount }).map(() => null);
 
-  for (let i = 0; i < safeFilled; i += 1) {
-    board[i] = randomInt(1, 9, rng);
+  if (safeFilled === 0) return emptyBoard;
+
+  const fillRatio = safeFilled / Math.max(1, cellCount);
+  const hardTier = rows >= 8 || fillRatio >= 0.55;
+  const midTier = rows >= 7 || fillRatio >= 0.48;
+  const targetMinMoves = hardTier ? 1 : midTier ? 1 : 2;
+  const targetMaxMoves = hardTier ? 2 : midTier ? 3 : 4;
+
+  let bestBoard = [...emptyBoard];
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let attempt = 0; attempt < 36; attempt += 1) {
+    const board: Array<number | null> = [...emptyBoard];
+
+    // Pack random values at positions 0..safeFilled-1 (top of board).
+    for (let i = 0; i < safeFilled; i += 1) {
+      board[i] = randomInt(1, 9, rng);
+    }
+
+    // Anti-orphan repair: ensure every value present has at least one potential partner.
+    const counts = buildValueCounts(board.slice(0, safeFilled));
+    for (let guard = 0; guard < safeFilled * 4; guard += 1) {
+      const orphans = getOrphanValues(counts);
+      if (orphans.length === 0) break;
+      const victim = orphans[0];
+      const fix = complementFor(victim);
+      let replaceIdx = -1;
+      for (let i = 0; i < safeFilled; i += 1) {
+        const v = board[i];
+        if (typeof v === 'number' && v !== victim && getPairSupport(v, counts) > 2) {
+          replaceIdx = i;
+          break;
+        }
+      }
+      if (replaceIdx < 0) {
+        for (let i = 0; i < safeFilled; i += 1) {
+          const v = board[i];
+          if (typeof v === 'number' && v !== fix) {
+            replaceIdx = i;
+            break;
+          }
+        }
+      }
+      if (replaceIdx < 0) break;
+      const prev = board[replaceIdx] as number;
+      counts[prev] = Math.max(0, counts[prev] - 1);
+      board[replaceIdx] = fix;
+      counts[fix] += 1;
+    }
+
+    // Shuffle only inside each row to preserve top-packed layout.
+    for (let row = 0; row * cols < safeFilled; row += 1) {
+      const rowStart = row * cols;
+      const rowEnd = Math.min(rowStart + cols, safeFilled);
+      for (let i = rowEnd - 1; i > rowStart; i -= 1) {
+        const j = rowStart + Math.floor(rng() * (i - rowStart + 1));
+        const temp = board[i];
+        board[i] = board[j];
+        board[j] = temp;
+      }
+    }
+
+    const moves = countValidMoves(board, cols);
+    const belowMin = Math.max(0, targetMinMoves - moves);
+    const aboveMax = Math.max(0, moves - targetMaxMoves);
+    const score = belowMin * 3 + aboveMax;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestBoard = board;
+    }
+    if (score === 0) return board;
   }
 
-  // Shuffle board positions deterministically so fill is not concentrated.
-  for (let i = board.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rng() * (i + 1));
-    const temp = board[i];
-    board[i] = board[j];
-    board[j] = temp;
-  }
-
-  return board;
+  return bestBoard;
 }
 
 export function canValuesMatch(a: number, b: number): boolean {
@@ -63,24 +125,144 @@ function buildValueCounts(board: Array<number | null>): number[] {
   return counts;
 }
 
-function buildCoherentLineValues(board: Array<number | null>, count: number): number[] {
-  const counts = buildValueCounts(board);
-  const baseValues = Array.from({ length: 9 }, (_, index) => index + 1).filter((value) => counts[value] > 0);
-  if (baseValues.length === 0 || count <= 0) return [];
+function getPairSupport(value: number, counts: number[]): number {
+  if (value === 5) return counts[5];
+  return counts[value] + counts[10 - value];
+}
 
-  const preferred: number[] = [];
-  baseValues.forEach((value) => {
-    preferred.push(value);
-    const complement = 10 - value;
-    if (complement >= 1 && complement <= 9) preferred.push(complement);
-    if (counts[value] >= 2) preferred.push(value);
+function getOrphanValues(counts: number[]): number[] {
+  const orphans: number[] = [];
+  for (let value = 1; value <= 9; value += 1) {
+    if (counts[value] <= 0) continue;
+    if (getPairSupport(value, counts) < 2) {
+      orphans.push(value);
+    }
+  }
+  return orphans;
+}
+
+function complementFor(value: number): number {
+  return value === 5 ? 5 : 10 - value;
+}
+
+function rankValuesForChallenge(counts: number[]): number[] {
+  const present = Array.from({ length: 9 }, (_, index) => index + 1).filter((value) => counts[value] > 0);
+  if (present.length === 0) {
+    return [1, 9, 2, 8, 3, 7, 4, 6, 5];
+  }
+
+  // Prioritize scarce/at-risk values first to keep board solvable but still tense.
+  return present.sort((a, b) => getPairSupport(a, counts) - getPairSupport(b, counts));
+}
+
+function countValidMoves(board: Array<number | null>, cols: number): number {
+  const nonEmpty = board
+    .map((value, index) => ({ value, index }))
+    .filter((entry): entry is { value: number; index: number } => entry.value !== null);
+
+  let matches = 0;
+  for (let i = 0; i < nonEmpty.length; i += 1) {
+    for (let j = i + 1; j < nonEmpty.length; j += 1) {
+      const a = nonEmpty[i];
+      const b = nonEmpty[j];
+      if (!canValuesMatch(a.value, b.value)) continue;
+      if (isValidMatchConnection(board, a.index, b.index, cols)) matches += 1;
+    }
+  }
+
+  return matches;
+}
+
+function buildChallengingLineValues(board: Array<number | null>, count: number): number[] {
+  if (count <= 0) return [];
+
+  const counts = buildValueCounts(board);
+  const line: number[] = [];
+  const occupied = board.filter((value): value is number => value !== null).length;
+  const denseBoard = occupied / Math.max(1, board.length) >= 0.45;
+  const complementEvery = denseBoard ? 5 : 4;
+
+  while (line.length < count) {
+    const orphans = getOrphanValues(counts);
+    if (orphans.length > 0) {
+      const candidate = complementFor(orphans[0]);
+      line.push(candidate);
+      counts[candidate] += 1;
+      continue;
+    }
+
+    const ranked = rankValuesForChallenge(counts);
+    const pivot = ranked[line.length % ranked.length];
+    // Harder cadence: complements appear less often than before.
+    const candidate = line.length % complementEvery === 0 ? complementFor(pivot) : pivot;
+    line.push(candidate);
+    counts[candidate] += 1;
+  }
+
+  // Repair pass: no value present in board+line can remain orphaned.
+  for (let guard = 0; guard < count * 4; guard += 1) {
+    const orphans = getOrphanValues(counts);
+    if (orphans.length === 0) break;
+
+    const missing = orphans[0];
+    const replacement = complementFor(missing);
+    const replaceIndex = line.findIndex((value) => getPairSupport(value, counts) > 2);
+    const indexToUse = replaceIndex >= 0 ? replaceIndex : line.length - 1;
+
+    const prev = line[indexToUse];
+    counts[prev] = Math.max(0, counts[prev] - 1);
+    line[indexToUse] = replacement;
+    counts[replacement] += 1;
+  }
+
+  return line;
+}
+
+function hasNoOrphanValues(board: Array<number | null>): boolean {
+  return getOrphanValues(buildValueCounts(board)).length === 0;
+}
+
+function fillBoardAtIndices(
+  board: Array<number | null>,
+  targetIndices: number[],
+  values: number[],
+): Array<number | null> {
+  const next = [...board];
+  for (let i = 0; i < targetIndices.length; i += 1) {
+    next[targetIndices[i]] = values[i];
+  }
+  return next;
+}
+
+function pickInsertionIndicesBelow(
+  board: Array<number | null>,
+  cols: number,
+  toAdd: number,
+): number[] {
+  let lastOccupiedRow = -1;
+  board.forEach((value, index) => {
+    if (value !== null) {
+      const row = Math.floor(index / cols);
+      if (row > lastOccupiedRow) lastOccupiedRow = row;
+    }
   });
 
-  const line: number[] = [];
-  for (let i = 0; i < count; i += 1) {
-    line.push(preferred[i % preferred.length]);
-  }
-  return line;
+  const targetFirstRow = lastOccupiedRow + 1;
+  const belowEmpty: number[] = [];
+  const otherEmpty: number[] = [];
+
+  board.forEach((value, index) => {
+    if (value === null) {
+      const row = Math.floor(index / cols);
+      if (row >= targetFirstRow) {
+        belowEmpty.push(index);
+      } else {
+        otherEmpty.push(index);
+      }
+    }
+  });
+
+  return [...belowEmpty, ...otherEmpty].slice(0, toAdd);
 }
 
 function findConnectableEmptyPair(
@@ -197,47 +379,75 @@ export function hasAnyValidMove(board: Array<number | null>, cols: number): bool
   return false;
 }
 
+export function compactBoard(board: Array<number | null>, cols: number): Array<number | null> {
+  const rowCount = Math.floor(board.length / cols);
+  const compacted: Array<number | null> = Array.from({ length: board.length }).map(() => null);
+  let writeRow = 0;
+
+  for (let row = 0; row < rowCount; row += 1) {
+    const rowStart = row * cols;
+    const hasNumber = board.slice(rowStart, rowStart + cols).some((v) => v !== null);
+    if (hasNumber) {
+      for (let col = 0; col < cols; col += 1) {
+        compacted[writeRow * cols + col] = board[rowStart + col];
+      }
+      writeRow += 1;
+    }
+  }
+
+  return compacted;
+}
+
 export function addLineFromRemaining(
   board: Array<number | null>,
-  addLineCount: number,
+  _addLineCount?: number,
   cols?: number,
 ): { nextBoard: Array<number | null>; added: number } {
-  const existing = board.filter((value): value is number => value !== null);
-  if (existing.length === 0 || addLineCount <= 0) {
+  // toAdd = numero de celdas actualmente ocupadas (mecanica de castigo/recompensa).
+  const occupiedCount = board.filter((value): value is number => value !== null).length;
+  if (occupiedCount === 0) {
     return { nextBoard: board, added: 0 };
   }
 
-  const nextBoard = [...board];
-  const emptyIndices = nextBoard
+  const emptyIndices = board
     .map((value, index) => ({ value, index }))
     .filter((entry) => entry.value === null)
     .map((entry) => entry.index);
 
-  let writeCursor = 0;
-  const toAdd = Math.min(addLineCount, emptyIndices.length);
+  const toAdd = Math.min(occupiedCount, emptyIndices.length);
+  if (toAdd <= 0) {
+    return { nextBoard: board, added: 0 };
+  }
 
-  // Seed one guaranteed connectable pair when possible to avoid artificial dead states.
-  if (typeof cols === 'number' && toAdd >= 2) {
-    const pair = findConnectableEmptyPair(nextBoard, emptyIndices, cols);
+  // Insercion siempre debajo del ultimo bloque ocupado, de izquierda a derecha.
+  const selectedIndices =
+    typeof cols === 'number'
+      ? pickInsertionIndicesBelow(board, cols, toAdd)
+      : emptyIndices.slice(0, toAdd);
+
+  const values = buildChallengingLineValues(board, toAdd);
+  const candidate = fillBoardAtIndices([...board], selectedIndices, values);
+
+  const playableEnough = typeof cols !== 'number' || hasAnyValidMove(candidate, cols);
+  if (playableEnough && hasNoOrphanValues(candidate)) {
+    return { nextBoard: candidate, added: toAdd };
+  }
+
+  // Fallback: forzar al menos un par conectable si el tablero perdio jugabilidad.
+  if (typeof cols === 'number' && toAdd >= 2 && !hasAnyValidMove(candidate, cols)) {
+    const pair = findConnectableEmptyPair([...board], selectedIndices, cols);
     if (pair) {
-      const [a, b] = pair;
-      const pairValue = existing[0];
-      nextBoard[a] = pairValue;
-      nextBoard[b] = pairValue;
-      writeCursor = 2;
-      emptyIndices.splice(emptyIndices.indexOf(a), 1);
-      emptyIndices.splice(emptyIndices.indexOf(b), 1);
+      const fallback = [...candidate];
+      const pairValue = board.find((v): v is number => v !== null) ?? 1;
+      fallback[pair[0]] = pairValue;
+      fallback[pair[1]] = pairValue;
+      return { nextBoard: fallback, added: toAdd };
     }
   }
 
-  const remainingSlots = Math.max(0, toAdd - writeCursor);
-  const coherentValues = buildCoherentLineValues(board, remainingSlots);
-  for (let i = 0; i < remainingSlots; i += 1) {
-    nextBoard[emptyIndices[i]] = coherentValues[i] ?? existing[i % existing.length];
-  }
-
-  return { nextBoard, added: toAdd };
+  return { nextBoard: candidate, added: toAdd };
 }
+
 
 export function computeBoardClearedPercent(board: Array<number | null>): number {
   const total = board.length;
@@ -279,10 +489,13 @@ export function evaluateNumberMatchWin(input: {
   boardClearedPercent: number;
   validMatches: number;
   invalidMatches: number;
+  boardEmpty?: boolean;
 }): boolean {
+  if (input.boardEmpty) return true;
+
   const efficientEnough = input.validMatches >= 6;
-  const clearedEnough = input.boardClearedPercent >= 80;
+  const clearedEnough = input.boardClearedPercent >= 88;
   const weightedAttempts = input.validMatches + input.invalidMatches * 0.5 + 1;
   const execution = (input.validMatches / weightedAttempts) * 100;
-  return clearedEnough && efficientEnough && execution >= 40;
+  return clearedEnough && efficientEnough && execution >= 50;
 }

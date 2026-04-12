@@ -11,25 +11,25 @@ export type FocusGridDifficultyConfig = {
 const CONFIG_BY_DIFFICULTY: Record<Difficulty, FocusGridDifficultyConfig> = {
   principiante: {
     gridSize: 3,
-    totalSeconds: 45,
+    totalSeconds: 30,
     targetMinMs: 30_000,
     targetMaxMs: 45_000,
   },
   avanzado: {
     gridSize: 4,
-    totalSeconds: 42,
+    totalSeconds: 30,
     targetMinMs: 29_000,
     targetMaxMs: 42_000,
   },
   experto: {
     gridSize: 5,
-    totalSeconds: 38,
+    totalSeconds: 30,
     targetMinMs: 28_000,
     targetMaxMs: 38_000,
   },
   maestro: {
     gridSize: 6,
-    totalSeconds: 34,
+    totalSeconds: 30,
     targetMinMs: 27_000,
     targetMaxMs: 34_000,
   },
@@ -62,7 +62,7 @@ export function calcAccuracy(correctTaps: number, totalTaps: number): number {
 export function applyFocusGridCorrectTimeBonus(
   timeLeftSec: number,
   totalSecondsBase: number,
-  bonusSec = 3,
+  bonusSec = 1,
   capExtraSec = 90,
 ): number {
   const cap = Math.max(1, totalSecondsBase + capExtraSec);

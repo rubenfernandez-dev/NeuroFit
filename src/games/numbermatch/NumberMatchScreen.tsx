@@ -17,6 +17,7 @@ import GameResultModal from '../../shared/feedback/GameResultModal';
 import {
   addLineFromRemaining,
   canValuesMatch,
+  compactBoard,
   computeBoardClearedPercent,
   computeRewardScoreNumberMatch,
   createInitialBoard,
@@ -272,11 +273,15 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
     const elapsedMs = Math.max(0, elapsedSec * 1000);
     const boardClearedPercent = computeBoardClearedPercent(board);
-    const won = evaluateNumberMatchWin({
-      boardClearedPercent,
-      validMatches,
-      invalidMatches,
-    });
+    const boardEmpty = board.every((cell) => cell === null);
+    const won = reason === 'no_moves'
+      ? false
+      : evaluateNumberMatchWin({
+          boardClearedPercent,
+          validMatches,
+          invalidMatches,
+          boardEmpty,
+        });
     const rewardScore = computeRewardScoreNumberMatch({
       score,
       validMatches,
@@ -365,10 +370,32 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (!sessionStarted || phase !== 'playing' || didFinish) return;
-    if (board.every((cell) => cell !== null)) {
+    const boardEmpty = board.every((cell) => cell === null);
+    if (boardEmpty) {
+      finishSession('board_cleared');
+      return;
+    }
+
+    const hasSpace = board.some((cell) => cell === null);
+    const hasMove = hasAnyValidMove(board, config.cols);
+    if (!hasMove && !hasSpace) {
+      finishSession('no_moves');
+      return;
+    }
+
+    if (!hasSpace) {
       finishSession('board_full');
     }
   }, [board, didFinish, finishSession, phase, sessionStarted]);
+  // Compact board: remove all-null rows and shift content up after each board change.
+  useEffect(() => {
+    if (board.length === 0) return;
+    const compacted = compactBoard(board, config.cols);
+    if (compacted.some((v, i) => v !== board[i])) {
+      clearFeedback();
+      setBoard(compacted);
+    }
+  }, [board, clearFeedback, config.cols]);
 
   const handleCellPress = useCallback((index: number) => {
     if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
@@ -434,7 +461,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     if (dailyBlockedReason || didFinish || finishing || phase !== 'playing') return;
     const result = addLineFromRemaining(board, config.addLineCount, config.cols);
     if (result.added <= 0) {
-      finishSession('board_full');
+      const hasMove = hasAnyValidMove(board, config.cols);
+      finishSession(hasMove ? 'board_full' : 'no_moves');
       return;
     }
 

@@ -354,7 +354,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       if (value === nextExpected) {
         void playSuccessFeedback();
         setCorrectTaps((prev) => prev + 1);
-        setTimeLeft((prev) => applyFocusGridCorrectTimeBonus(prev, config.totalSeconds, 3, 90));
+        setTimeLeft((prev) => applyFocusGridCorrectTimeBonus(prev, config.totalSeconds));
         applyTapFeedback({ type: 'correct', value });
 
         if (value >= totalCells) {
