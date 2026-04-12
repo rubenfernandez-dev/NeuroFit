@@ -195,22 +195,54 @@ Estado actual implementado:
 
 ### Sentry (Expo) - Setup Manual
 
-La integración quedó preparada, pero requiere variables de entorno para activarse.
+La integración está preparada en dos capas: runtime (captura de errores) y upload de sourcemaps en release Android.
 
 1. Instalar dependencias del proyecto (`npm install`).
-2. Configurar variable pública en entorno local/CI:
+2. Configurar variables de runtime (Expo):
 
 ```bash
 EXPO_PUBLIC_SENTRY_DSN=tu_dsn_de_sentry
 EXPO_PUBLIC_APP_ENV=production
 ```
 
-3. Reiniciar Metro o el build después de cambiar variables.
+3. Configurar upload de sourcemaps para Android release:
+
+- Archivo `android/sentry.release.properties`:
+
+```properties
+defaults.url=https://sentry.io/
+defaults.org=tu_org_slug
+defaults.project=tu_project_slug
+# auth.token=tu_token_opcional_si_no_quieres_usar_entorno
+```
+
+- Variable secreta (NO en git):
+
+```bash
+SENTRY_AUTH_TOKEN=tu_token_con_scope_project_releases
+```
+
+- Alternativa local segura para builds Android:
+
+```bash
+# archivo no versionado: .env.sentry-build-plugin
+SENTRY_AUTH_TOKEN=tu_token_con_scope_project_releases
+```
+
+`android/sentry.properties` puede ser regenerado por `expo prebuild`; por eso el release usa `android/sentry.release.properties` como fuente estable.
+`.env.sentry-build-plugin` es buena opción para no dejar el token en archivos versionados.
+
+4. Reiniciar Metro o el build después de cambiar variables.
 
 Comportamiento sin DSN:
 
 - La app no falla.
 - Sentry queda desactivado y se registra advertencia estructurada en logs.
+
+Comportamiento en release sin `org/project/token` para Sentry CLI:
+
+- El build falla en la tarea de upload de sourcemaps.
+- Error típico: `An organization ID or slug is required (provide with --org)`.
 
 ## Publicacion Y Store Readiness
 

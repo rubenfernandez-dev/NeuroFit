@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Image, Modal, Pressable, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../app/routes';
@@ -143,7 +143,14 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <>
       <Screen>
-        <Text style={[theme.typography.title, { color: theme.colors.text }]}>NeuroFit</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={[theme.typography.title, { color: theme.colors.text }]}>NeuroFit</Text>
+          <Image
+            source={require('../../assets/icon-foreground.png')}
+            style={{ width: 28, height: 28 }}
+            resizeMode="contain"
+          />
+        </View>
         <Text style={[theme.typography.body, { color: theme.colors.muted }]}>Entrena tu mente</Text>
         {loadError ? (
           <Card variant="warning">

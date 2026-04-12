@@ -93,6 +93,42 @@ cd android
 .\gradlew.bat assembleRelease
 ```
 
+### Requisito Sentry para release (sourcemaps)
+
+Si Sentry está activo para release, antes de construir debes tener:
+
+1. `android/sentry.release.properties` con:
+
+```properties
+defaults.url=https://sentry.io/
+defaults.org=TU_ORG_SLUG
+defaults.project=TU_PROJECT_SLUG
+# auth.token=TU_TOKEN_REAL_OPCIONAL
+```
+
+2. Token secreto en entorno (no en git):
+
+```powershell
+$env:SENTRY_AUTH_TOKEN = "TU_TOKEN_CON_SCOPE_PROJECT_RELEASES"
+```
+
+Alternativa local persistente y segura:
+
+```powershell
+# crear en la raiz del repo: .env.sentry-build-plugin
+SENTRY_AUTH_TOKEN=TU_TOKEN_CON_SCOPE_PROJECT_RELEASES
+```
+
+3. (Opcional) más logs de Sentry CLI:
+
+```powershell
+$env:SENTRY_LOG_LEVEL = "debug"
+```
+
+Sin estos datos, el build puede fallar en `:app:createBundleReleaseJsAndAssets_SentryUpload_*`.
+
+`android/sentry.properties` puede regenerarse durante `expo prebuild`; por eso este proyecto usa `android/sentry.release.properties` como archivo estable de release.
+
 ### Atencion: no usar `clean` como gate principal
 
 ```powershell
