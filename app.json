@@ -27,6 +27,9 @@
         "INTERNET",
         "VIBRATE",
         "POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
