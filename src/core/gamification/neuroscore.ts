@@ -25,6 +25,11 @@ type NeuroDelta = {
 type NeuroWeights = Record<NeuroDims, number>;
 const DEFAULT_NEURO_WEIGHTS: NeuroWeights = { speed: 0.5, memory: 0, logic: 0.3, attention: 0.2 };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const NEURO_INACTIVITY_GRACE_DAYS = 7;
+const NEURO_INACTIVITY_DECAY_PER_DAY = 1;
+const NEURO_INACTIVITY_MAX_DECAY_PER_UPDATE = 20;
+
 
 const WEIGHTS_BY_GAME: Partial<Record<GameId, NeuroWeights>> = {
   sudoku: { speed: 0, memory: 0, logic: 0.7, attention: 0.3 },
@@ -45,6 +50,42 @@ function mapTimeFactor(durationMs?: number, fastMs = 45_000, slowMs = 240_000): 
   if (durationMs <= fastMs) return 1;
   if (durationMs >= slowMs) return 0;
   return 1 - (durationMs - fastMs) / Math.max(1, slowMs - fastMs);
+}
+
+function zeroDelta(): NeuroDelta {
+  return {
+    speedDelta: 0,
+    memoryDelta: 0,
+    logicDelta: 0,
+    attentionDelta: 0,
+  };
+}
+
+function daysSinceISO(iso?: string, nowMs = Date.now()): number {
+  if (!iso) return 0;
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed)) return 0;
+  if (parsed >= nowMs) return 0;
+  return Math.floor((nowMs - parsed) / MS_PER_DAY);
+}
+
+function applyInactivityDecay(neuro: NeuroMetrics): NeuroMetrics {
+  const idleDays = daysSinceISO(neuro.updatedAtISO);
+  const overdueDays = Math.max(0, idleDays - NEURO_INACTIVITY_GRACE_DAYS);
+  if (overdueDays <= 0) return neuro;
+
+  const decay = Math.min(
+    NEURO_INACTIVITY_MAX_DECAY_PER_UPDATE,
+    overdueDays * NEURO_INACTIVITY_DECAY_PER_DAY,
+  );
+
+  return {
+    ...neuro,
+    speed: clamp(Math.round(neuro.speed - decay), 0, 100),
+    memory: clamp(Math.round(neuro.memory - decay), 0, 100),
+    logic: clamp(Math.round(neuro.logic - decay), 0, 100),
+    attention: clamp(Math.round(neuro.attention - decay), 0, 100),
+  };
 }
 
 function computePerformanceNormalized(input: NeuroScoreInput): number {
@@ -99,8 +140,16 @@ function computePerformanceNormalized(input: NeuroScoreInput): number {
 }
 
 export function computeNeuroDelta(input: NeuroScoreInput): NeuroDelta {
+  if (input.won !== true) {
+    return zeroDelta();
+  }
+
   const weights = WEIGHTS_BY_GAME[input.gameId] ?? DEFAULT_NEURO_WEIGHTS;
   const performance = computePerformanceNormalized(input);
+  if (performance <= 0.5) {
+    return zeroDelta();
+  }
+
   const modeMultiplier = input.mode === 'daily' ? 1.15 : 1;
   const deltaRaw = (performance - 0.5) * 8 * modeMultiplier;
 
@@ -119,13 +168,14 @@ function smoothDimension(oldValue: number, delta: number, alpha: number): number
 
 export function applyNeuroScore(profile: Profile, input: NeuroScoreInput): { neuro: NeuroMetrics } {
   const alpha = input.mode === 'daily' ? 0.45 : 0.35;
+  const baseline = applyInactivityDecay(profile.neuro);
   const delta = computeNeuroDelta(input);
 
   const neuro: NeuroMetrics = {
-    speed: smoothDimension(profile.neuro.speed, delta.speedDelta, alpha),
-    memory: smoothDimension(profile.neuro.memory, delta.memoryDelta, alpha),
-    logic: smoothDimension(profile.neuro.logic, delta.logicDelta, alpha),
-    attention: smoothDimension(profile.neuro.attention, delta.attentionDelta, alpha),
+    speed: smoothDimension(baseline.speed, delta.speedDelta, alpha),
+    memory: smoothDimension(baseline.memory, delta.memoryDelta, alpha),
+    logic: smoothDimension(baseline.logic, delta.logicDelta, alpha),
+    attention: smoothDimension(baseline.attention, delta.attentionDelta, alpha),
     updatedAtISO: nowISO(),
   };
 

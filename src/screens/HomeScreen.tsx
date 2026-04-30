@@ -143,15 +143,17 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <>
       <Screen>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Text style={[theme.typography.title, { color: theme.colors.text }]}>NeuroFit</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 4 }}>
           <Image
             source={require('../../assets/icon-foreground.png')}
-            style={{ width: 28, height: 28 }}
+            style={{ width: 112, height: 112 }}
             resizeMode="contain"
           />
+          <View style={{ flexShrink: 1 }}>
+            <Text style={[theme.typography.title, { color: theme.colors.text }]}>NeuroFit</Text>
+            <Text style={[theme.typography.body, { color: theme.colors.muted }]}>Entrena tu mente</Text>
+          </View>
         </View>
-        <Text style={[theme.typography.body, { color: theme.colors.muted }]}>Entrena tu mente</Text>
         {loadError ? (
           <Card variant="warning">
             <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>

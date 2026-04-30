@@ -113,4 +113,52 @@ describe('neuroscore', () => {
     expect(Object.values(boosted.neuro).filter((value) => typeof value === 'number').every((value) => value >= 0 && value <= 100)).toBe(true);
     expect(Object.values(penalized.neuro).filter((value) => typeof value === 'number').every((value) => value >= 0 && value <= 100)).toBe(true);
   });
+
+  it('does not reduce logic after a lost sudoku when activity is recent', () => {
+    const profile = makeProfile({
+      neuro: {
+        speed: 50,
+        memory: 50,
+        logic: 50,
+        attention: 50,
+        updatedAtISO: new Date().toISOString(),
+      },
+    });
+
+    const next = applyNeuroScore(profile, {
+      gameId: 'sudoku',
+      difficulty: 'avanzado',
+      won: false,
+      score: 0,
+      durationMs: 300_000,
+      mistakes: 3,
+      mode: 'normal',
+    });
+
+    expect(next.neuro.logic).toBe(profile.neuro.logic);
+  });
+
+  it('applies decay after prolonged inactivity even without win', () => {
+    const profile = makeProfile({
+      neuro: {
+        speed: 60,
+        memory: 60,
+        logic: 60,
+        attention: 60,
+        updatedAtISO: '2025-01-01T00:00:00.000Z',
+      },
+    });
+
+    const next = applyNeuroScore(profile, {
+      gameId: 'sudoku',
+      difficulty: 'avanzado',
+      won: false,
+      score: 0,
+      durationMs: 300_000,
+      mistakes: 3,
+      mode: 'normal',
+    });
+
+    expect(next.neuro.logic).toBeLessThan(profile.neuro.logic);
+  });
 });

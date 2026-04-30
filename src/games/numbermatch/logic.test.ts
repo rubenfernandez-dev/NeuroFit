@@ -85,6 +85,17 @@ describe('numbermatch connection rules', () => {
     expect(added).toBe(4);
   });
 
+  it('respeta addLineCount como limite maximo de insercion', () => {
+    const cols = 5;
+    const board = Array<number | null>(25).fill(null);
+    board[0] = 3;
+    board[4] = 7;
+    board[11] = 1;
+    board[14] = 4;
+    const { added } = addLineFromRemaining(board, 2, cols);
+    expect(added).toBe(2);
+  });
+
   it('los numeros nuevos se insertan debajo de la ultima fila ocupada', () => {
     const cols = 5;
     const board = Array<number | null>(25).fill(null);

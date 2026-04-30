@@ -11,11 +11,11 @@ export type NumberMatchDifficultyConfig = {
 
 const CONFIG_BY_DIFFICULTY: Record<Difficulty, NumberMatchDifficultyConfig> = {
   principiante: { rows: 6, cols: 6, initialFilled: 18, addLineCount: 6, totalSeconds: 90 },
-  // Slightly lower opening density and line pressure from avanzado+ to avoid early hard-locks.
-  avanzado: { rows: 6, cols: 7, initialFilled: 20, addLineCount: 6, totalSeconds: 85 },
-  experto: { rows: 7, cols: 7, initialFilled: 26, addLineCount: 6, totalSeconds: 80 },
-  maestro: { rows: 7, cols: 8, initialFilled: 31, addLineCount: 7, totalSeconds: 78 },
-  gran_maestro: { rows: 8, cols: 8, initialFilled: 36, addLineCount: 7, totalSeconds: 75 },
+  // Advanced tiers intentionally start denser to force deeper planning from move one.
+  avanzado: { rows: 6, cols: 7, initialFilled: 23, addLineCount: 7, totalSeconds: 80 },
+  experto: { rows: 7, cols: 7, initialFilled: 30, addLineCount: 7, totalSeconds: 76 },
+  maestro: { rows: 7, cols: 8, initialFilled: 36, addLineCount: 8, totalSeconds: 72 },
+  gran_maestro: { rows: 8, cols: 8, initialFilled: 42, addLineCount: 8, totalSeconds: 68 },
 };
 
 export function getNumberMatchConfig(difficulty: Difficulty): NumberMatchDifficultyConfig {
@@ -39,10 +39,11 @@ export function createInitialBoard(rows: number, cols: number, initialFilled: nu
   if (safeFilled === 0) return emptyBoard;
 
   const fillRatio = safeFilled / Math.max(1, cellCount);
-  const hardTier = rows >= 8 || fillRatio >= 0.55;
-  const midTier = rows >= 7 || fillRatio >= 0.48;
-  const targetMinMoves = hardTier ? 1 : midTier ? 1 : 2;
-  const targetMaxMoves = hardTier ? 2 : midTier ? 3 : 4;
+  const hardTier = rows >= 7 || fillRatio >= 0.58;
+  const midTier = rows >= 6 || fillRatio >= 0.5;
+  const targetMinMoves = hardTier ? 0 : 1;
+  const targetMaxMoves = hardTier ? 1 : midTier ? 2 : 3;
+  const maxEasyMoves = hardTier ? 0 : midTier ? 1 : 2;
 
   let bestBoard = [...emptyBoard];
   let bestScore = Number.POSITIVE_INFINITY;
@@ -101,7 +102,9 @@ export function createInitialBoard(rows: number, cols: number, initialFilled: nu
     const moves = countValidMoves(board, cols);
     const belowMin = Math.max(0, targetMinMoves - moves);
     const aboveMax = Math.max(0, moves - targetMaxMoves);
-    const score = belowMin * 3 + aboveMax;
+    const easyMoves = countEasyOpeningMoves(board, cols);
+    const easyMovePenalty = Math.max(0, easyMoves - maxEasyMoves);
+    const score = belowMin * 4 + aboveMax * 3 + easyMovePenalty * 2;
 
     if (score < bestScore) {
       bestScore = score;
@@ -173,6 +176,38 @@ function countValidMoves(board: Array<number | null>, cols: number): number {
   return matches;
 }
 
+function countEasyOpeningMoves(board: Array<number | null>, cols: number): number {
+  const nonEmpty = board
+    .map((value, index) => ({ value, index }))
+    .filter((entry): entry is { value: number; index: number } => entry.value !== null);
+
+  let easyMatches = 0;
+  for (let i = 0; i < nonEmpty.length; i += 1) {
+    for (let j = i + 1; j < nonEmpty.length; j += 1) {
+      const a = nonEmpty[i];
+      const b = nonEmpty[j];
+      if (!canValuesMatch(a.value, b.value)) continue;
+      if (!isValidMatchConnection(board, a.index, b.index, cols)) continue;
+
+      const aRc = indexToRC(a.index, cols);
+      const bRc = indexToRC(b.index, cols);
+      const rowDist = Math.abs(aRc.row - bRc.row);
+      const colDist = Math.abs(aRc.col - bRc.col);
+
+      const obviousAdjacent = areAdjacent(a.index, b.index, cols) || areDiagonalAdjacent(a.index, b.index, cols);
+      const shortOpenLine =
+        (aRc.row === bRc.row && colDist <= 2 && noNumbersBetweenInRow(board, a.index, b.index, cols)) ||
+        (aRc.col === bRc.col && rowDist <= 2 && noNumbersBetweenInCol(board, a.index, b.index, cols));
+
+      if (obviousAdjacent || shortOpenLine) {
+        easyMatches += 1;
+      }
+    }
+  }
+
+  return easyMatches;
+}
+
 function buildChallengingLineValues(board: Array<number | null>, count: number): number[] {
   if (count <= 0) return [];
 
@@ -180,7 +215,7 @@ function buildChallengingLineValues(board: Array<number | null>, count: number):
   const line: number[] = [];
   const occupied = board.filter((value): value is number => value !== null).length;
   const denseBoard = occupied / Math.max(1, board.length) >= 0.45;
-  const complementEvery = denseBoard ? 5 : 4;
+  const complementEvery = denseBoard ? 6 : 5;
 
   while (line.length < count) {
     const orphans = getOrphanValues(counts);
@@ -400,7 +435,7 @@ export function compactBoard(board: Array<number | null>, cols: number): Array<n
 
 export function addLineFromRemaining(
   board: Array<number | null>,
-  _addLineCount?: number,
+  addLineCount?: number,
   cols?: number,
 ): { nextBoard: Array<number | null>; added: number } {
   // toAdd = numero de celdas actualmente ocupadas (mecanica de castigo/recompensa).
@@ -414,7 +449,8 @@ export function addLineFromRemaining(
     .filter((entry) => entry.value === null)
     .map((entry) => entry.index);
 
-  const toAdd = Math.min(occupiedCount, emptyIndices.length);
+  const lineCap = typeof addLineCount === 'number' ? Math.max(1, Math.floor(addLineCount)) : occupiedCount;
+  const toAdd = Math.min(occupiedCount, lineCap, emptyIndices.length);
   if (toAdd <= 0) {
     return { nextBoard: board, added: 0 };
   }
