@@ -2,7 +2,7 @@
   "expo": {
     "name": "NeuroFit",
     "slug": "neurofit",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -22,7 +22,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.ruben.neurofitapp",
-      "versionCode": 1,
+      "versionCode": 3,
+      "minSdkVersion": 23,
       "permissions": [
         "INTERNET",
         "VIBRATE",
