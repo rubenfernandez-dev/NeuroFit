@@ -21,7 +21,7 @@
         "backgroundImage": "./assets/icon-background.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.ruben.neurofit",
+      "package": "com.ruben.neurofitapp",
       "versionCode": 1,
       "permissions": [
         "INTERNET",

@@ -7,6 +7,7 @@ import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
+import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
@@ -398,7 +399,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <Card variant="primary">
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Focus Grid · {difficultyLabel(difficulty)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Focus Grid · {difficultyLabel(difficulty)}</Text>
+            <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.totalSeconds} compact align="right" />
+          </View>
           <View style={{ marginTop: 8 }}>
             <Pill
               label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`}
@@ -406,7 +410,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
             />
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Tiempo: {msToClock(timeLeft * 1000)} · Grid: {config.gridSize}x{config.gridSize}
+            Grid: {config.gridSize}x{config.gridSize}
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
             Siguiente: {Math.min(nextExpected, totalCells)} · Fallos: {mistakes} · Precisión: {accuracy}%

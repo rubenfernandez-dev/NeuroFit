@@ -13,12 +13,60 @@ export type MentalMathSessionConfig = {
   minAccuracyPctToWin: number;
 };
 
+/**
+ * BONUS DE TIEMPO POR DIFICULTAD - OPCIONES PROPUESTAS
+ * 
+ * ACTUAL (valores en línea abajo):
+ * principiante: 3s | avanzado: 3s | maestro: 4s | gran_maestro: 4s
+ * 
+ * OPCIÓN A - CONSERVADORA (reduce presión principalmente en niveles altos):
+ * principiante: 2s | avanzado: 2s | maestro: 3s | gran_maestro: 3s
+ * Rationale: Mantiene el juego desafiante, especialmente para principiantes.
+ * 
+ * OPCIÓN B - EQUILIBRADA (reducción suave según dificultad):
+ * principiante: 3s | avanzado: 3s | maestro: 3s | gran_maestro: 4s
+ * Rationale: Mantiene consistencia, recompensa máximo nivel ligeramente.
+ * 
+ * OPCIÓN C - EXIGENTE (presión mayor, rewards en niveles altos):
+ * principiante: 2s | avanzado: 2s | maestro: 4s | gran_maestro: 5s
+ * Rationale: Niveles bajos son más desafiantes, expertos reciben recompensa mayor.
+ * 
+ * ⚠️  IMPORTANTE: Cambiar solo los valores `bonusOnCorrectSec` abajo.
+ * Mantén el resto de propiedades igual a menos que encuentres desequilibrios obvios.
+ * 
+ * Para aplicar, descomenta la opción que prefieras y comenta la actual.
+ */
 const CONFIG_BY_DIFFICULTY: Record<Difficulty, MentalMathSessionConfig> = {
+  // === CURRENT (default) ===
   principiante: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 3, maxErrors: 8, minCorrectToWin: 7, minAccuracyPctToWin: 50 },
   avanzado: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 3, maxErrors: 7, minCorrectToWin: 8, minAccuracyPctToWin: 55 },
   experto: { initialTimeSec: 62, maxTimeSec: 112, bonusOnCorrectSec: 3, maxErrors: 6, minCorrectToWin: 9, minAccuracyPctToWin: 58 },
   maestro: { initialTimeSec: 68, maxTimeSec: 118, bonusOnCorrectSec: 4, maxErrors: 5, minCorrectToWin: 10, minAccuracyPctToWin: 62 },
   gran_maestro: { initialTimeSec: 72, maxTimeSec: 124, bonusOnCorrectSec: 4, maxErrors: 5, minCorrectToWin: 11, minAccuracyPctToWin: 65 },
+
+  /* OPCIÓN A - CONSERVADORA (uncomment below to use)
+  principiante: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 2, maxErrors: 8, minCorrectToWin: 7, minAccuracyPctToWin: 50 },
+  avanzado: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 2, maxErrors: 7, minCorrectToWin: 8, minAccuracyPctToWin: 55 },
+  experto: { initialTimeSec: 62, maxTimeSec: 112, bonusOnCorrectSec: 2, maxErrors: 6, minCorrectToWin: 9, minAccuracyPctToWin: 58 },
+  maestro: { initialTimeSec: 68, maxTimeSec: 118, bonusOnCorrectSec: 3, maxErrors: 5, minCorrectToWin: 10, minAccuracyPctToWin: 62 },
+  gran_maestro: { initialTimeSec: 72, maxTimeSec: 124, bonusOnCorrectSec: 3, maxErrors: 5, minCorrectToWin: 11, minAccuracyPctToWin: 65 },
+  */
+
+  /* OPCIÓN B - EQUILIBRADA (uncomment below to use)
+  principiante: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 3, maxErrors: 8, minCorrectToWin: 7, minAccuracyPctToWin: 50 },
+  avanzado: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 3, maxErrors: 7, minCorrectToWin: 8, minAccuracyPctToWin: 55 },
+  experto: { initialTimeSec: 62, maxTimeSec: 112, bonusOnCorrectSec: 3, maxErrors: 6, minCorrectToWin: 9, minAccuracyPctToWin: 58 },
+  maestro: { initialTimeSec: 68, maxTimeSec: 118, bonusOnCorrectSec: 3, maxErrors: 5, minCorrectToWin: 10, minAccuracyPctToWin: 62 },
+  gran_maestro: { initialTimeSec: 72, maxTimeSec: 124, bonusOnCorrectSec: 4, maxErrors: 5, minCorrectToWin: 11, minAccuracyPctToWin: 65 },
+  */
+
+  /* OPCIÓN C - EXIGENTE (uncomment below to use)
+  principiante: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 2, maxErrors: 8, minCorrectToWin: 7, minAccuracyPctToWin: 50 },
+  avanzado: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 2, maxErrors: 7, minCorrectToWin: 8, minAccuracyPctToWin: 55 },
+  experto: { initialTimeSec: 62, maxTimeSec: 112, bonusOnCorrectSec: 2, maxErrors: 6, minCorrectToWin: 9, minAccuracyPctToWin: 58 },
+  maestro: { initialTimeSec: 68, maxTimeSec: 118, bonusOnCorrectSec: 4, maxErrors: 5, minCorrectToWin: 10, minAccuracyPctToWin: 62 },
+  gran_maestro: { initialTimeSec: 72, maxTimeSec: 124, bonusOnCorrectSec: 5, maxErrors: 5, minCorrectToWin: 11, minAccuracyPctToWin: 65 },
+  */
 };
 
 export function getMentalMathSessionConfig(difficulty: Difficulty): MentalMathSessionConfig {

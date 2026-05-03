@@ -270,6 +270,14 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     setInputValue((prev) => (prev === '0' ? digit : prev + digit));
   };
 
+  const deleteLastDigit = () => {
+    if (dailyBlockedReason || didFinish) return;
+    setInputValue((prev) => {
+      if (prev.length <= 1) return '';
+      return prev.slice(0, -1);
+    });
+  };
+
   const resetSession = () => {
     if (isDaily) return;
     setQuestions(generateQuestions(difficulty, 40, isDaily ? dailySeed : undefined));
@@ -312,19 +320,50 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       ) : null}
 
       {!dailyBlockedReason ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '-', '0'].map((digit) => (
-          <Button key={digit} title={digit} onPress={() => appendDigit(digit)} style={{ width: 68 }} />
-        ))}
+        <View style={{ gap: 8 }}>
+          {/* Fila 1: 7 8 9 */}
+          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+            {['7', '8', '9'].map((digit) => (
+              <Button key={digit} title={digit} onPress={() => appendDigit(digit)} style={{ flex: 1, maxWidth: 80 }} />
+            ))}
+          </View>
+          {/* Fila 2: 4 5 6 */}
+          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+            {['4', '5', '6'].map((digit) => (
+              <Button key={digit} title={digit} onPress={() => appendDigit(digit)} style={{ flex: 1, maxWidth: 80 }} />
+            ))}
+          </View>
+          {/* Fila 3: 1 2 3 */}
+          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+            {['1', '2', '3'].map((digit) => (
+              <Button key={digit} title={digit} onPress={() => appendDigit(digit)} style={{ flex: 1, maxWidth: 80 }} />
+            ))}
+          </View>
+          {/* Fila 4: Borrar 0 Enviar */}
+          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+            <Button
+              title="⌫"
+              variant="primary"
+              onPress={deleteLastDigit}
+              style={{ flex: 1, maxWidth: 80, backgroundColor: theme.colors.red, borderColor: theme.colors.red }}
+              disabled={!!dailyBlockedReason}
+            />
+            <Button title="0" onPress={() => appendDigit('0')} style={{ flex: 1, maxWidth: 80 }} />
+            <Button
+              title="✓"
+              variant="primary"
+              onPress={submit}
+              style={{ flex: 1, maxWidth: 80, backgroundColor: theme.colors.green, borderColor: theme.colors.green }}
+              disabled={!!dailyBlockedReason}
+            />
+          </View>
+
+          {/* Fila 5: signo negativo */}
+          <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }}>
+            <Button title="-" variant="secondary" onPress={() => appendDigit('-')} style={{ flex: 1, maxWidth: 80 }} disabled={!!dailyBlockedReason} />
+          </View>
         </View>
       ) : null}
-
-      <Card>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Button title="Borrar" variant="secondary" onPress={() => setInputValue('')} style={{ flex: 1 }} disabled={!!dailyBlockedReason} />
-          <Button title="Enviar" onPress={submit} style={{ flex: 1 }} disabled={!!dailyBlockedReason} />
-        </View>
-      </Card>
 
       <Button title="Reiniciar" variant="ghost" onPress={resetSession} disabled={isDaily || !!dailyBlockedReason} />
     </Screen>

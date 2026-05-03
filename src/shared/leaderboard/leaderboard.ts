@@ -9,26 +9,11 @@ export type LeaderboardEntry = {
 };
 
 const FIRST_NAMES = [
-  'Alex',
-  'Sofía',
-  'Leo',
-  'Emma',
-  'Nora',
-  'Lucas',
-  'Maya',
-  'Bruno',
-  'Iris',
-  'Ava',
-  'Mateo',
-  'Noa',
-  'Ethan',
-  'Hugo',
-  'Milo',
-  'Luna',
-  'Sara',
-  'Izan',
-  'Chloe',
-  'Teo',
+  'Alex', 'Luna', 'Kai', 'Nova', 'Zoe', 'Max', 'Rayo', 'Neko', 'Neo', 'Ivy',
+  'Leo', 'Kira', 'J', 'Milo', 'Storm', 'Pixel', 'Noa', 'Aria', 'Rex', 'Sky',
+  'Ash', 'Echo', 'Blaze', 'Sage', 'Lux', 'Phoenix', 'Sonic', 'Zen', 'Vex', 'Trix',
+  'Spark', 'Prism', 'Flux', 'Void', 'Cipher', 'Spirit', 'Quinn', 'Vale', 'Axel', 'River',
+  'Hope', 'Drake', 'Aurora', 'Sierra', 'Onyx', 'Omega', 'Viper', 'Nexus', 'Rune', 'Zest',
 ];
 
 function hashString(value: string): number {

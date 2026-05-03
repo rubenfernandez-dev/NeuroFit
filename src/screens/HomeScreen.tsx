@@ -191,13 +191,35 @@ export default function HomeScreen({ navigation }: Props) {
 
         <PrimaryButton title="Jugar ahora" onPress={() => navigation.navigate('Games')} />
 
-        <Card variant="success">
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>🎯 Reto diario</Text>
+        <Card
+          variant="success"
+          style={{
+            borderColor: dailyCompleted ? `${theme.colors.green}AA` : `${theme.colors.pink}AA`,
+            borderWidth: 2,
+            backgroundColor: theme.mode === 'dark' ? theme.colors.bg1 : dailyCompleted ? `${theme.colors.green}12` : `${theme.colors.pink}12`,
+            shadowColor: dailyCompleted ? theme.colors.green : theme.colors.pink,
+            shadowOpacity: 0.18,
+            shadowRadius: 14,
+            shadowOffset: { width: 0, height: 8 },
+            elevation: 4,
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{dailyCompleted ? '✅ Reto diario' : '🎯 Reto diario'}</Text>
+            <Pill label={dailyCompleted ? 'Completado' : 'Destacado'} tone={dailyCompleted ? 'success' : 'pink'} />
+          </View>
           <Text style={[theme.typography.bodySmall, { color: theme.colors.muted, marginTop: 6 }]}>
-            {dailyCompleted ? `Completado por hoy (${dailyProgress}). ¡Gran trabajo!` : `Progreso ${dailyProgress}. Completa el circuito para reclamar XP extra.`}
+            {dailyCompleted
+              ? `Completado por hoy (${dailyProgress}). ¡Gran trabajo!`
+              : `Progreso ${dailyProgress}. Completa el circuito para reclamar XP extra.`}
           </Text>
           <View style={{ marginTop: 12 }}>
-            <Button title={dailyCompleted ? '✅ Completado' : 'Iniciar reto diario'} variant="secondary" onPress={() => navigation.navigate('DailyChallenge')} />
+            <Button
+              title={dailyCompleted ? '✅ Completado' : 'Iniciar reto diario'}
+              variant={dailyCompleted ? 'secondary' : 'primary'}
+              onPress={() => navigation.navigate('DailyChallenge')}
+              style={dailyCompleted ? { borderColor: theme.colors.green } : undefined}
+            />
           </View>
         </Card>
 

@@ -350,7 +350,7 @@ export default function LeaderboardScreen() {
                   </View>
                 ))}
 
-                <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 4 }]}>Clasificacion local simulada en dispositivo (sin backend global).</Text>
+
         </Card>
       </ScrollView>
     </Screen>

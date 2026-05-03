@@ -7,6 +7,7 @@ import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
+import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
@@ -502,7 +503,6 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       if (correctTap) {
         void playSuccessFeedback();
         setCorrectTaps((prev) => prev + 1);
-        setTimeLeft((prev) => Math.min(config.totalSeconds + MAX_TIME_BONUS_CAP_SEC, prev + CORRECT_TAP_BONUS_SEC));
         if (reactionDelta > 0) {
           setReactionAccumMs((prev) => prev + reactionDelta);
           setReactionSamples((prev) => prev + 1);
@@ -514,6 +514,9 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
           setPromptAtMs(Date.now());
           return;
         }
+
+        // Apply time bonus only when completing the entire sequence
+        setTimeLeft((prev) => Math.min(config.totalSeconds + MAX_TIME_BONUS_CAP_SEC, prev + CORRECT_TAP_BONUS_SEC));
 
         const completedRound = round;
         setMaxSequence((prev) => Math.max(prev, completedRound));
@@ -577,7 +580,10 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <Card variant="primary">
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Pattern Memory · {difficultyLabel(difficulty)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Pattern Memory · {difficultyLabel(difficulty)}</Text>
+            <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.totalSeconds} compact align="right" />
+          </View>
           <View style={{ marginTop: 8 }}>
             <Pill
               label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`}
@@ -585,7 +591,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
             />
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Tiempo: {msToClock(timeLeft * 1000)} · Ronda: {round}/{config.maxRound}
+            Ronda: {round}/{config.maxRound}
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
             Mejor secuencia: {maxSequence} · Precisión: {accuracy}% · RT medio: {reactionTimeAvg} ms

@@ -8,6 +8,7 @@ import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
+import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { createSeededRng, pickOne } from '../../shared/utils/random';
@@ -388,12 +389,15 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <Card variant="cyan">
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
+            <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.durationSec} compact align="right" />
+          </View>
           <View style={{ marginTop: 8 }}>
             <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Tiempo: {msToClock(timeLeft * 1000)} · Ronda: {round}
+            Ronda: {round}
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
             Score: {score} · Aciertos: {correct} · Fallos: {mistakes} · Precisión: {accuracyPct}%

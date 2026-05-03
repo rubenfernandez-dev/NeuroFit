@@ -89,7 +89,7 @@ export default function GamesScreen({ navigation }: Props) {
   };
 
   return (
-    <Screen>
+    <Screen contentStyle={{ padding: 12, gap: 8 }}>
       {loadError ? (
         <Card variant="warning">
           <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>

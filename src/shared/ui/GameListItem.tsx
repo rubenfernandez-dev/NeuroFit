@@ -67,7 +67,7 @@ export default function GameListItem({ title, subtitle, icon, category, difficul
             {subtitle}
           </Text>
 
-          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <View style={[styles.categoryPill, { backgroundColor: `${accent}22` }]}>
               <Text style={[styles.categoryPillText, { color: accent }]}>{CATEGORY_LABELS[category]}</Text>
             </View>
@@ -86,31 +86,31 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   card: {
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     borderLeftWidth: 4,
-    padding: 14,
+    padding: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   iconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   icon: {
-    fontSize: 26,
+    fontSize: 22,
   },
   categoryPill: {
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   categoryPillText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
   },
   tag: {
