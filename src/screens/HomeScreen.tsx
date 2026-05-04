@@ -19,6 +19,9 @@ import { captureException, classifyDataFailure, formatLoadFailureMessage } from 
 import { getCategoryColors } from '../shared/theme/categoryColors';
 import StreakWidget from '../shared/ui/StreakWidget';
 import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
+import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
+import { formatNeuroCoinReward, formatNeuroCoins } from '../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -154,6 +157,9 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={[theme.typography.body, { color: theme.colors.muted }]}>Entrena tu mente</Text>
           </View>
         </View>
+
+        <PlayerEconomyBar xp={xpTotal} neuroCoins={seasonPoints} />
+
         {loadError ? (
           <Card variant="warning">
             <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>
@@ -232,22 +238,23 @@ export default function HomeScreen({ navigation }: Props) {
           <Text style={[theme.typography.h3, { color: theme.colors.text }]}>🏆 Liga semanal</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
             <Pill label={`${league.badgeEmoji} ${league.name}`} tone="default" />
-            <Pill label={`${seasonPoints} SP`} tone="cyan" />
+            <NeuroCoinBadge amount={seasonPoints} compact />
             <Pill label={`Puesto #${userRank}`} tone={userRank <= 10 ? 'success' : userRank >= 41 ? 'danger' : 'default'} />
           </View>
           <View style={{ marginTop: 10 }}>
             <AnimatedProgressBar
               value={top10Progress}
               color={leagueAccent}
-              label={spToTop10 > 0 ? `Te faltan ${spToTop10} SP para Top 10` : '¡Estás en zona de ascenso!'}
+              label={spToTop10 > 0 ? `Te faltan ${formatNeuroCoins(spToTop10)} para Top 10` : '¡Estás en zona de ascenso!'}
               height={10}
               durationMs={520}
             />
           </View>
           <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 10 }]}>Top 10 ascienden • Últimos 10 descienden</Text>
           {userRank >= 41 ? (
-            <Text style={[theme.typography.bodySmall, { color: theme.colors.red, marginTop: 4 }]}>Te faltan {spToSafety} SP para salir de descenso</Text>
+            <Text style={[theme.typography.bodySmall, { color: theme.colors.red, marginTop: 4 }]}>Te faltan {formatNeuroCoins(spToSafety)} para salir de descenso</Text>
           ) : null}
+          <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 6 }]}>Gana NeuroCoins jugando retos.</Text>
         </Card>
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -308,7 +315,7 @@ export default function HomeScreen({ navigation }: Props) {
               Puesto final: {weeklyResult?.finalRank ?? '-'} / 50
             </Text>
             <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-              SP de la semana: {weeklyResult?.spFinal ?? 0}
+              NeuroCoins de la semana: {formatNeuroCoins(weeklyResult?.spFinal ?? 0)}
             </Text>
             <View style={{ marginTop: 12 }}>
               <Button title="Continuar" onPress={closeWeeklyResult} />

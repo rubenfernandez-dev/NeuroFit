@@ -2,9 +2,17 @@ import { Difficulty, GameId } from '../../games/types';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 import { logEvent } from '../../core/telemetry';
 import { claimDailyReward, completeDailyStage, getDailyProgress } from '../storage/daily';
-import { getProfile } from '../storage/profile';
-import { grantXp } from './xp';
-import { grantSeasonPoints } from './seasonPoints';
+import { grantFlatXp, grantXp } from './xp';
+import { grantFlatSeasonPoints, grantSeasonPoints } from './seasonPoints';
+import {
+  getSessionStreak,
+  incrementSessionStreak,
+  markSessionBonusGranted,
+  resetSessionStreak,
+  SESSION_STREAK_BONUS_SP,
+  SESSION_STREAK_BONUS_XP,
+  shouldGrantSessionBonus,
+} from '../session/sessionStreak';
 
 export type SessionMode = 'normal' | 'daily';
 
@@ -13,6 +21,8 @@ export type SessionMetrics = {
   mistakes?: number;
   score?: number;
 };
+
+export type SessionStreakPolicy = 'increment' | 'keep' | 'reset';
 
 export type DailyCompletionData = {
   kind: 'stage' | 'final';
@@ -36,6 +46,8 @@ export type CompleteGameSessionInput = {
   mode: SessionMode;
   won: boolean;
   metrics: SessionMetrics;
+  rewardMultiplier?: number;
+  streakPolicy?: SessionStreakPolicy;
   stageIndex?: number;
   // Some games intentionally use a different score signal for NeuroScore updates.
   neuroScoreOverride?: number;
@@ -44,6 +56,13 @@ export type CompleteGameSessionInput = {
 export type CompleteGameSessionResult = {
   earnedXp: number;
   earnedSp: number;
+  sessionStreak: number;
+  streakBonus: {
+    granted: boolean;
+    xp: number;
+    sp: number;
+    milestone?: number;
+  };
   dailyCompletion?: DailyCompletionData;
 };
 
@@ -143,7 +162,17 @@ async function completeDailyGameSession(input: CompleteGameSessionInput): Promis
     circuitCompleted: stageResult.circuitCompletedNow,
   });
 
-  return { earnedXp, earnedSp, dailyCompletion };
+  return {
+    earnedXp,
+    earnedSp,
+    dailyCompletion,
+    sessionStreak: getSessionStreak(),
+    streakBonus: {
+      granted: false,
+      xp: 0,
+      sp: 0,
+    },
+  };
 }
 
 export async function completeGameSession(input: CompleteGameSessionInput): Promise<CompleteGameSessionResult> {
@@ -153,6 +182,8 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
     mode,
     won,
     metrics,
+    rewardMultiplier,
+    streakPolicy,
     stageIndex,
     neuroScoreOverride,
   } = input;
@@ -174,6 +205,9 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
     return completionPromise;
   }
 
+  const safeRewardMultiplier = Math.max(0, Math.min(1, rewardMultiplier ?? (won ? 1 : 0.5)));
+  const resolvedStreakPolicy: SessionStreakPolicy = streakPolicy ?? (won ? 'increment' : 'keep');
+
   await updateNeuroAfterGame({
     gameId,
     difficulty,
@@ -191,6 +225,7 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
     durationMs: metrics.durationMs,
     score: rewardScore,
     mode: 'normal',
+    rewardMultiplier: safeRewardMultiplier,
   });
   const earnedXp = xpResult.earnedXp;
 
@@ -201,9 +236,73 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
     mistakes: metrics.mistakes,
     durationMs: metrics.durationMs,
     isDaily: false,
+    rewardMultiplier: safeRewardMultiplier,
   });
-  const earnedSp = spResult.earnedSeasonPoints;
+  let earnedSp = spResult.earnedSeasonPoints;
 
-  logEvent('game_session_completed', { gameId, difficulty, mode, won, earnedXp, earnedSp });
-  return { earnedXp, earnedSp };
+  let sessionStreak = getSessionStreak();
+  if (resolvedStreakPolicy === 'increment') {
+    sessionStreak = incrementSessionStreak();
+  } else if (resolvedStreakPolicy === 'reset') {
+    sessionStreak = resetSessionStreak();
+  }
+
+  let streakBonus = {
+    granted: false,
+    xp: 0,
+    sp: 0,
+    milestone: undefined as number | undefined,
+  };
+
+  if (resolvedStreakPolicy === 'increment' && shouldGrantSessionBonus(sessionStreak)) {
+    await grantFlatXp({ gameId, amount: SESSION_STREAK_BONUS_XP, source: 'session_streak_bonus' });
+    await grantFlatSeasonPoints({ gameId, difficulty, amount: SESSION_STREAK_BONUS_SP, source: 'session_streak_bonus' });
+    markSessionBonusGranted(sessionStreak);
+
+    earnedSp += SESSION_STREAK_BONUS_SP;
+    const earnedXpWithBonus = earnedXp + SESSION_STREAK_BONUS_XP;
+    streakBonus = {
+      granted: true,
+      xp: SESSION_STREAK_BONUS_XP,
+      sp: SESSION_STREAK_BONUS_SP,
+      milestone: sessionStreak,
+    };
+
+    logEvent('session_streak_bonus_granted', {
+      gameId,
+      difficulty,
+      mode,
+      sessionStreak,
+      bonusXp: SESSION_STREAK_BONUS_XP,
+      bonusSp: SESSION_STREAK_BONUS_SP,
+    });
+
+    logEvent('game_session_completed', {
+      gameId,
+      difficulty,
+      mode,
+      won,
+      rewardMultiplier: safeRewardMultiplier,
+      streakPolicy: resolvedStreakPolicy,
+      earnedXp: earnedXpWithBonus,
+      earnedSp,
+      sessionStreak,
+      streakBonusGranted: true,
+    });
+    return { earnedXp: earnedXpWithBonus, earnedSp, sessionStreak, streakBonus };
+  }
+
+  logEvent('game_session_completed', {
+    gameId,
+    difficulty,
+    mode,
+    won,
+    rewardMultiplier: safeRewardMultiplier,
+    streakPolicy: resolvedStreakPolicy,
+    earnedXp,
+    earnedSp,
+    sessionStreak,
+    streakBonusGranted: false,
+  });
+  return { earnedXp, earnedSp, sessionStreak, streakBonus };
 }

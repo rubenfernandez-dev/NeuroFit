@@ -16,8 +16,11 @@ import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/da
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
@@ -30,6 +33,9 @@ type ResultSummary = {
   earnedSp: number;
   elapsedMs: number;
   attempts: number;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 export default function MemoryScreen({ route, navigation }: Props) {
@@ -244,6 +250,9 @@ export default function MemoryScreen({ route, navigation }: Props) {
       await clearMemoryState();
       setSessionStarted(false);
       void playVictoryFeedback();
+      if (completionResult.streakBonus.granted) {
+        void playStreakBonusFeedback();
+      }
       setResultSummary({
         score: roundScore,
         rewardScore,
@@ -253,6 +262,13 @@ export default function MemoryScreen({ route, navigation }: Props) {
         earnedSp: completionResult.earnedSp,
         elapsedMs,
         attempts,
+        sessionStreak: completionResult.sessionStreak,
+        streakBonusTitle: completionResult.streakBonus.granted
+          ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+          : undefined,
+        streakBonusLabel: completionResult.streakBonus.granted
+          ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+          : undefined,
       });
       setResultVisible(true);
       setFinishing(false);
@@ -332,6 +348,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
   return (
     <>
     <Screen>
+      <PlayerEconomyBar compact />
       <Card variant="cyan">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Memory · {difficultyLabel(difficulty)}</Text>
         <View style={{ marginTop: 8 }}>
@@ -384,23 +401,36 @@ export default function MemoryScreen({ route, navigation }: Props) {
         { label: 'Fallos', value: resultSummary?.mismatches ?? 0 },
         { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
         { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
-        { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },
+        { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(resultSummary?.earnedSp ?? 0) },
       ]}
+      sessionStreak={resultSummary?.sessionStreak ?? 0}
+      streakBonusTitle={resultSummary?.streakBonusTitle}
+      streakBonusText={resultSummary?.streakBonusLabel}
       primaryAction={{
+        label: 'Siguiente reto',
+        onPress: () => {
+          setResultVisible(false);
+          navigateToNextChallenge(navigation, 'memory', difficulty);
+        },
+      }}
+      secondaryAction={{
         label: 'Jugar de nuevo',
+        variant: 'secondary',
         onPress: () => {
           setResultVisible(false);
           restart();
         },
       }}
-      secondaryAction={{
-        label: 'Ver ranking local',
-        variant: 'secondary',
-        onPress: () => {
-          setResultVisible(false);
-          navigation.navigate('Leaderboard');
+      auxiliaryActions={[
+        {
+          label: 'Ver ranking local',
+          variant: 'ghost',
+          onPress: () => {
+            setResultVisible(false);
+            navigation.navigate('Leaderboard');
+          },
         },
-      }}
+      ]}
     />
     </>
   );

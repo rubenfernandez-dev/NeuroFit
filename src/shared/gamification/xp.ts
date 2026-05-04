@@ -15,6 +15,13 @@ type CalcXpInput = {
 
 type GrantXpInput = CalcXpInput & {
   mode?: 'normal' | 'daily';
+  rewardMultiplier?: number;
+};
+
+type GrantFlatXpInput = {
+  gameId: GameId;
+  amount: number;
+  source?: 'manual' | 'session_streak_bonus';
 };
 
 export function calcXp({ difficulty = 'principiante', score = 0, isDaily = false }: CalcXpInput): number {
@@ -27,12 +34,13 @@ export function calcXp({ difficulty = 'principiante', score = 0, isDaily = false
 
 export async function grantXp(input: GrantXpInput) {
   const mode = input.mode ?? 'normal';
+  const rewardMultiplier = Math.max(0, Math.min(1, input.rewardMultiplier ?? 1));
   const baseXp = calcXp({
     ...input,
     isDaily: mode === 'daily',
   });
   const profile = await getProfile();
-  const earnedXp = baseXp;
+  const earnedXp = Math.max(0, Math.round(baseXp * rewardMultiplier));
   const xpTotal = profile.xpTotal + earnedXp;
   const level = getLevelByXp(xpTotal);
 
@@ -42,11 +50,24 @@ export async function grantXp(input: GrantXpInput) {
       mode,
       difficulty: input.difficulty,
       baseXp,
+      rewardMultiplier,
       earnedXp,
     });
   }
 
-  logEvent('xp_granted', { gameId: input.gameId, mode, difficulty: input.difficulty, baseXp, earnedXp });
+  logEvent('xp_granted', { gameId: input.gameId, mode, difficulty: input.difficulty, baseXp, rewardMultiplier, earnedXp });
+
+  const updated = await updateProfile({ xpTotal, levelId: level.id });
+  return { earnedXp, profile: updated, level };
+}
+
+export async function grantFlatXp({ gameId, amount, source = 'manual' }: GrantFlatXpInput) {
+  const profile = await getProfile();
+  const earnedXp = Math.max(0, Math.floor(amount));
+  const xpTotal = profile.xpTotal + earnedXp;
+  const level = getLevelByXp(xpTotal);
+
+  logEvent('xp_granted_flat', { gameId, source, earnedXp });
 
   const updated = await updateProfile({ xpTotal, levelId: level.id });
   return { earnedXp, profile: updated, level };

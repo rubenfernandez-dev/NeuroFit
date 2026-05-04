@@ -20,7 +20,11 @@ import FocusGridBoard from './components/FocusGridBoard';
 import FocusGridResultModal from './components/FocusGridResultModal';
 import { useTapFeedback } from './hooks/useTapFeedback';
 import { buildFocusGridSessionResult, getSessionSeed } from './session';
-import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { resetSessionStreak } from '../../shared/session/sessionStreak';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FocusGrid'>;
 
@@ -37,6 +41,9 @@ type ResultSummary = {
   spGained: number;
   performance: number;
   gameResult: FocusGridGameResult;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 export default function FocusGridScreen({ route, navigation }: Props) {
@@ -256,6 +263,8 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         difficulty,
         mode: isDaily ? 'daily' : 'normal',
         won: sessionResult.completed,
+        rewardMultiplier: sessionResult.completed ? 1 : correctTaps === 0 ? 0 : 0.5,
+        streakPolicy: sessionResult.completed ? 'increment' : 'keep',
         stageIndex,
         metrics: {
           durationMs: elapsedMs,
@@ -300,6 +309,9 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
       await clearFocusGridState();
       setSessionStarted(false);
+      if (completionResult.streakBonus.granted) {
+        void playStreakBonusFeedback();
+      }
       setResultSummary({
         elapsedMs,
         score: finalizedResult.score,
@@ -311,6 +323,13 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         spGained: completionResult.earnedSp,
         performance: finalizedResult.performance,
         gameResult: finalizedResult.gameResult,
+        sessionStreak: completionResult.sessionStreak,
+        streakBonusTitle: completionResult.streakBonus.granted
+          ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+          : undefined,
+        streakBonusLabel: completionResult.streakBonus.granted
+          ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+          : undefined,
       });
       setResultVisible(true);
       setFinishing(false);
@@ -384,8 +403,11 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
   const exitGame = useCallback(() => {
     clearFeedback();
+    if (sessionStarted && !didFinish) {
+      resetSessionStreak();
+    }
     navigation.navigate(isDaily ? 'DailyChallenge' : 'Games');
-  }, [clearFeedback, isDaily, navigation]);
+  }, [clearFeedback, didFinish, isDaily, navigation, sessionStarted]);
 
   const accuracy = calcAccuracy(correctTaps, totalTaps);
   const gridGap = config.gridSize >= 6 ? 4 : 6;
@@ -398,6 +420,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
   return (
     <>
       <Screen>
+        <PlayerEconomyBar compact />
         <Card variant="primary">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Focus Grid · {difficultyLabel(difficulty)}</Text>
@@ -468,6 +491,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         visible={resultVisible}
         resultSummary={resultSummary}
         onClose={() => setResultVisible(false)}
+        onNextChallenge={() => {
+          setResultVisible(false);
+          navigateToNextChallenge(navigation, 'focusgrid', difficulty);
+        }}
         onRestart={() => {
           setResultVisible(false);
           restart();
@@ -475,6 +502,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         onViewLeaderboard={() => {
           setResultVisible(false);
           navigation.navigate('Leaderboard');
+        }}
+        onExit={() => {
+          setResultVisible(false);
+          exitGame();
         }}
       />
     </>

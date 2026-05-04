@@ -11,26 +11,38 @@ type CalcSeasonPointsInput = {
   mistakes?: number;
   durationMs?: number;
   isDaily?: boolean;
+  rewardMultiplier?: number;
   // Legacy flag kept for backward compatibility during economy migration.
   // Current SP formula in computeSp does not use this flag yet.
   dailyCompletedAndClaimable?: boolean;
+};
+
+type GrantFlatSeasonPointsInput = {
+  gameId: GameId;
+  difficulty: Difficulty;
+  amount: number;
+  source?: 'manual' | 'session_streak_bonus';
 };
 
 export function calcSeasonPoints({
   difficulty,
   score = 0,
   isDaily,
+  rewardMultiplier,
   dailyCompletedAndClaimable,
 }: CalcSeasonPointsInput): number {
   // Intentionally ignored to preserve current reward balance and avoid regressions.
   // Intentionally no-op for now to preserve current behavior.
   void dailyCompletedAndClaimable;
 
-  return computeSp({
+  const base = computeSp({
     score: Math.max(0, Math.min(100, Math.floor(score))),
     difficulty,
     isDaily: Boolean(isDaily),
   });
+
+  const multiplier = Math.max(0, Math.min(1, rewardMultiplier ?? 1));
+  return Math.max(0, Math.round(base * multiplier));
 }
 
 export async function grantSeasonPoints(input: CalcSeasonPointsInput): Promise<{
@@ -48,6 +60,35 @@ export async function grantSeasonPoints(input: CalcSeasonPointsInput): Promise<{
   });
 
   logEvent('sp_granted', { gameId: input.gameId, difficulty: input.difficulty, isDaily: input.isDaily, earnedSeasonPoints, seasonPoints: updated.seasonPoints });
+
+  return {
+    earnedSeasonPoints,
+    seasonPoints: updated.seasonPoints,
+    league: getLeagueById(profile.leagueId),
+  };
+}
+
+export async function grantFlatSeasonPoints(input: GrantFlatSeasonPointsInput): Promise<{
+  earnedSeasonPoints: number;
+  seasonPoints: number;
+  league: League;
+}> {
+  await ensureSeasonCurrent();
+  const profile = await getProfile();
+  const earnedSeasonPoints = Math.max(0, Math.floor(input.amount));
+  const nextSeasonPoints = profile.seasonPoints + earnedSeasonPoints;
+
+  const updated = await updateProfile({
+    seasonPoints: nextSeasonPoints,
+  });
+
+  logEvent('sp_granted_flat', {
+    gameId: input.gameId,
+    difficulty: input.difficulty,
+    source: input.source ?? 'manual',
+    earnedSeasonPoints,
+    seasonPoints: updated.seasonPoints,
+  });
 
   return {
     earnedSeasonPoints,

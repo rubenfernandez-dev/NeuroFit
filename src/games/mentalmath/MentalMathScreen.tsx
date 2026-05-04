@@ -12,11 +12,18 @@ import { useAppTheme } from '../../shared/theme/theme';
 import { clearMentalMathState, getMentalMathState, saveMentalMathState } from './storage/mentalmathState';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
@@ -28,6 +35,9 @@ type ResultSummary = {
   reason: 'timeout' | 'error_limit';
   earnedXp: number;
   earnedSp: number;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 export default function MentalMathScreen({ route, navigation }: Props) {
@@ -49,6 +59,14 @@ export default function MentalMathScreen({ route, navigation }: Props) {
   const [resultVisible, setResultVisible] = useState(false);
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [extraTimeUses, setExtraTimeUses] = useState(0);
+  const [skipUses, setSkipUses] = useState(0);
+  const [economyFeedback, setEconomyFeedback] = useState<string | null>(null);
+
+  const MAX_EXTRA_TIME_USES = 2;
+  const MAX_SKIP_USES = 2;
 
   useEffect(() => {
     let mounted = true;
@@ -77,6 +95,11 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       }
 
       const saved = await getMentalMathState();
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
+
       if (
         saved &&
         saved.difficulty === difficulty &&
@@ -179,6 +202,8 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     );
     const score = computeMentalMathRewardScore({ correct, wrong, elapsedSec, difficulty });
     const won = reason !== 'error_limit' && evaluateMentalMathWin({ correct, wrong, difficulty });
+    const rewardMultiplier = won ? 1 : correct === 0 ? 0 : 0.5;
+    const streakPolicy = won && correct >= 1 ? 'increment' : 'keep';
 
     if (won) {
       await trackWin({
@@ -195,6 +220,8 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       difficulty,
       mode: isDaily ? 'daily' : 'normal',
       won,
+      rewardMultiplier,
+      streakPolicy,
       stageIndex,
       metrics: {
         durationMs: elapsedSec * 1000,
@@ -220,6 +247,9 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     setSessionStarted(false);
     if (won) void playVictoryFeedback();
     else void playDefeatFeedback();
+    if (completionResult.streakBonus.granted) {
+      void playStreakBonusFeedback();
+    }
     setResultSummary({
       correct,
       wrong,
@@ -228,7 +258,16 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       reason,
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
+      sessionStreak: completionResult.sessionStreak,
+      streakBonusTitle: completionResult.streakBonus.granted
+        ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+        : undefined,
+      streakBonusLabel: completionResult.streakBonus.granted
+        ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+        : undefined,
     });
+    setXpTotal((prev) => prev + completionResult.earnedXp);
+    setNeuroCoins((prev) => prev + completionResult.earnedSp);
     setResultVisible(true);
     setFinishing(false);
   };
@@ -266,8 +305,20 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
   const appendDigit = (digit: string) => {
     if (dailyBlockedReason || didFinish) return;
-    if (digit === '-' && inputValue.includes('-')) return;
-    setInputValue((prev) => (prev === '0' ? digit : prev + digit));
+    if (digit === '-') {
+      setInputValue((prev) => {
+        if (prev.startsWith('-')) return prev.slice(1);
+        if (prev.length === 0) return '-';
+        return `-${prev}`;
+      });
+      return;
+    }
+
+    setInputValue((prev) => {
+      if (prev === '0') return digit;
+      if (prev === '-0') return `-${digit}`;
+      return `${prev}${digit}`;
+    });
   };
 
   const deleteLastDigit = () => {
@@ -290,13 +341,53 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     setResultVisible(false);
     setResultSummary(null);
     setSessionStarted(true);
+    setExtraTimeUses(0);
+    setSkipUses(0);
+    setEconomyFeedback(null);
     trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
+  };
+
+  const spendForAction = async (cost: number, reason: 'mental_math_extra_time' | 'mental_math_skip_question') => {
+    const result = await spendNeuroCoins(cost, reason);
+    if (!result.success) {
+      Alert.alert('Saldo insuficiente', 'No tienes suficientes NeuroCoins');
+      return false;
+    }
+
+    setNeuroCoins(result.newBalance);
+    setEconomyFeedback(`-${cost} 🪙`);
+    void playSuccessFeedback();
+    return true;
+  };
+
+  const handleBuyExtraTime = async () => {
+    if (didFinish || dailyBlockedReason) return;
+    if (extraTimeUses >= MAX_EXTRA_TIME_USES) return;
+
+    const spent = await spendForAction(NEURO_COIN_COSTS.mentalMathExtraTime, 'mental_math_extra_time');
+    if (!spent) return;
+
+    setTimeLeft((prev) => Math.min(sessionConfig.maxTimeSec, prev + 3));
+    setExtraTimeUses((prev) => prev + 1);
+  };
+
+  const handleSkipQuestion = async () => {
+    if (didFinish || dailyBlockedReason) return;
+    if (skipUses >= MAX_SKIP_USES) return;
+
+    const spent = await spendForAction(NEURO_COIN_COSTS.mentalMathSkipQuestion, 'mental_math_skip_question');
+    if (!spent) return;
+
+    setCurrentIndex((prev) => prev + 1);
+    setInputValue('');
+    setSkipUses((prev) => prev + 1);
   };
 
   return (
     <>
     <Screen>
       <HUD timeLeft={timeLeft} correct={correct} wrong={wrong} />
+      <PlayerEconomyBar xp={xpTotal} neuroCoins={neuroCoins} compact />
 
       <Card variant="pink">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Mental Math · {difficultyLabel(difficulty)}</Text>
@@ -309,6 +400,36 @@ export default function MentalMathScreen({ route, navigation }: Props) {
           +{sessionConfig.bonusOnCorrectSec}s por acierto · Máx. fallos: {sessionConfig.maxErrors}
         </Text>
       </Card>
+
+      {!dailyBlockedReason ? (
+        <Card style={{ padding: 10 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <NeuroCoinActionButton
+                label="+3s"
+                icon="⏱"
+                cost={NEURO_COIN_COSTS.mentalMathExtraTime}
+                usesLeft={MAX_EXTRA_TIME_USES - extraTimeUses}
+                disabled={didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES}
+                onPress={handleBuyExtraTime}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <NeuroCoinActionButton
+                label="Saltar"
+                icon="⏭"
+                cost={NEURO_COIN_COSTS.mentalMathSkipQuestion}
+                usesLeft={MAX_SKIP_USES - skipUses}
+                disabled={didFinish || skipUses >= MAX_SKIP_USES}
+                onPress={handleSkipQuestion}
+              />
+            </View>
+          </View>
+          {economyFeedback ? (
+            <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text>
+          ) : null}
+        </Card>
+      ) : null}
 
       {dailyBlockedReason ? (
         <Card>
@@ -384,23 +505,36 @@ export default function MentalMathScreen({ route, navigation }: Props) {
         { label: 'Fallos', value: resultSummary?.wrong ?? 0 },
         { label: 'Score', value: resultSummary?.score ?? 0 },
         { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
-        { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },
+        { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(resultSummary?.earnedSp ?? 0) },
       ]}
+      sessionStreak={resultSummary?.sessionStreak ?? 0}
+      streakBonusTitle={resultSummary?.streakBonusTitle}
+      streakBonusText={resultSummary?.streakBonusLabel}
       primaryAction={{
+        label: 'Siguiente reto',
+        onPress: () => {
+          setResultVisible(false);
+          navigateToNextChallenge(navigation, 'mentalmath', difficulty);
+        },
+      }}
+      secondaryAction={{
         label: 'Jugar de nuevo',
+        variant: 'secondary',
         onPress: () => {
           setResultVisible(false);
           resetSession();
         },
       }}
-      secondaryAction={{
-        label: 'Ver ranking local',
-        variant: 'secondary',
-        onPress: () => {
-          setResultVisible(false);
-          navigation.navigate('Leaderboard');
+      auxiliaryActions={[
+        {
+          label: 'Ver ranking local',
+          variant: 'ghost',
+          onPress: () => {
+            setResultVisible(false);
+            navigation.navigate('Leaderboard');
+          },
         },
-      }}
+      ]}
     />
     </>
   );

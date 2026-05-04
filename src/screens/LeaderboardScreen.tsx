@@ -12,6 +12,9 @@ import Button from '../shared/ui/Button';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 import { logEvent } from '../core/telemetry';
+import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
+import { formatNeuroCoinCost, formatNeuroCoins } from '../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type LeagueStatus = 'ascenso' | 'media' | 'descenso' | 'sin_datos';
 
@@ -67,6 +70,7 @@ export default function LeaderboardScreen() {
   const { theme } = useAppTheme();
   const [seasonId, setSeasonId] = useState('');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [xpTotal, setXpTotal] = useState(0);
   const [seasonPoints, setSeasonPoints] = useState(0);
   const [leagueId, setLeagueId] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'grand_master' | 'legend'>('bronze');
   const [rank, setRank] = useState(50);
@@ -82,6 +86,7 @@ export default function LeaderboardScreen() {
       const board = await generateMockLeaderboard(profile.seasonPoints, profile.leagueId, profile.seasonId, 'Tu');
 
       setSeasonId(profile.seasonId);
+      setXpTotal(profile.xpTotal);
       setSeasonPoints(profile.seasonPoints);
       setLeagueId(profile.leagueId);
       setEntries(board);
@@ -194,6 +199,10 @@ export default function LeaderboardScreen() {
           logEvent('leaderboard_scrolled', { seasonId, leagueId });
         }}
       >
+        <View style={{ marginBottom: 12 }}>
+          <PlayerEconomyBar compact xp={xpTotal} neuroCoins={seasonPoints} />
+        </View>
+
         {loadError ? (
           <Card variant="warning">
             <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>
@@ -216,7 +225,7 @@ export default function LeaderboardScreen() {
               <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Liga {league.name}</Text>
               <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Temporada {seasonId || '-'}</Text>
             </View>
-            <Pill label={`${seasonPoints} SP`} tone="cyan" />
+            <NeuroCoinBadge amount={seasonPoints} compact />
           </View>
 
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
@@ -237,7 +246,7 @@ export default function LeaderboardScreen() {
                   <AnimatedProgressBar
                     value={spToTop10 > 0 ? Math.max(0, Math.min(1, seasonPoints / (seasonPoints + spToTop10))) : 1}
                     color={leagueAccent}
-                    label={spToTop10 > 0 ? `Te faltan ${spToTop10} SP para Top 10` : 'Ya estas en zona de ascenso'}
+                    label={spToTop10 > 0 ? `Te faltan ${formatNeuroCoins(spToTop10)} para Top 10` : 'Ya estas en zona de ascenso'}
                     durationMs={520}
                     height={10}
                   />
@@ -247,8 +256,8 @@ export default function LeaderboardScreen() {
                   <Text style={{ color: theme.colors.muted }}>
                     {spOverDemotion !== null
                       ? spOverDemotion >= 0
-                        ? `Margen sobre descenso: +${spOverDemotion} SP`
-                        : `Estas a ${Math.abs(spOverDemotion)} SP de salir de descenso`
+                        ? `Margen sobre descenso: +${formatNeuroCoinCost(spOverDemotion)} ⚡`
+                        : `Estas a ${formatNeuroCoinCost(Math.abs(spOverDemotion))} de salir de descenso`
                       : 'Sin referencia de descenso disponible'}
                   </Text>
                   <Text style={{ color: theme.colors.muted }}>
@@ -267,13 +276,13 @@ export default function LeaderboardScreen() {
                       <Text style={[theme.typography.h3, { color: theme.colors.text }]}>#{userEntry.rank}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                      <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>Season Points</Text>
-                      <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{userEntry.seasonPoints} SP</Text>
+                      <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>NeuroCoins</Text>
+                      <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{formatNeuroCoins(userEntry.seasonPoints)}</Text>
                     </View>
                     <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 10 }]}>
                       {deltaToNext === null
                         ? 'Estas en la cima de tu liga. Excelente trabajo.'
-                        : `Te faltan ${deltaToNext} SP para superar al siguiente jugador.`}
+                        : `Te faltan ${formatNeuroCoins(deltaToNext)} para superar al siguiente jugador.`}
                     </Text>
                   </>
                 ) : (
@@ -343,7 +352,7 @@ export default function LeaderboardScreen() {
                       {entry.isUser ? <Text style={[theme.typography.caption, { color: theme.colors.primary }]}>Tu cuenta</Text> : null}
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{entry.seasonPoints} SP</Text>
+                      <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{formatNeuroCoins(entry.seasonPoints)}</Text>
                       {entry.rank <= getPromotionCutoff() ? <Pill label="Ascenso" tone="success" /> : null}
                       {entry.rank >= demotionCutoff ? <Pill label="Descenso" tone="danger" /> : null}
                     </View>

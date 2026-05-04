@@ -484,10 +484,10 @@ export default function SettingsScreen() {
               onPress={() => confirmDevReset('Reiniciar estadísticas', 'Borra estadísticas de juegos.', resetStats)}
             />
             <Button
-              title="Reiniciar temporada/SP"
+              title="Reiniciar temporada/NeuroCoins"
               variant="secondary"
                onPress={() =>
-                 confirmDevReset('Reiniciar temporada', 'Reinicia temporada, SP y liga.', async () => {
+                 confirmDevReset('Reiniciar temporada', 'Reinicia temporada, NeuroCoins y liga.', async () => {
                    await resetSeasonProgress();
                  })
                }

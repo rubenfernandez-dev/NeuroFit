@@ -14,13 +14,21 @@ import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { trackGameOver, trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import { SudokuCellPosition, SudokuHistoryEntry } from './model/types';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { resetSessionStreak } from '../../shared/session/sessionStreak';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -46,6 +54,9 @@ type VictorySummary = {
   earnedSp: number;
   elapsedMs: number;
   mistakes: number;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 export default function SudokuScreen({ route, navigation }: Props) {
@@ -81,6 +92,12 @@ export default function SudokuScreen({ route, navigation }: Props) {
   const [completionPulse, setCompletionPulse] = useState<UnitCompletionPulse>(EMPTY_UNIT_COMPLETION_PULSE);
   const [completionPulseVisible, setCompletionPulseVisible] = useState(false);
   const [completionPulseRunKey, setCompletionPulseRunKey] = useState(0);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [recoverMistakeUses, setRecoverMistakeUses] = useState(0);
+  const [economyFeedback, setEconomyFeedback] = useState<string | null>(null);
+
+  const MAX_RECOVER_MISTAKE_USES = 2;
 
   const selectedRow = Math.floor(selectedIndex / 9);
   const selectedCol = selectedIndex % 9;
@@ -180,6 +197,11 @@ export default function SudokuScreen({ route, navigation }: Props) {
       }
 
       const saved = await getSudokuState();
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
+
       if (
         saved &&
         saved.difficulty === difficulty &&
@@ -228,6 +250,8 @@ export default function SudokuScreen({ route, navigation }: Props) {
       setShowErrors(false);
       setCompletionPulse(EMPTY_UNIT_COMPLETION_PULSE);
       setCompletionPulseVisible(false);
+      setRecoverMistakeUses(0);
+      setEconomyFeedback(null);
       await trackSessionStart({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal' });
     };
 
@@ -356,12 +380,24 @@ export default function SudokuScreen({ route, navigation }: Props) {
     await clearSudokuState();
     setSessionStarted(false);
     void playVictoryFeedback();
+    if (completionResult.streakBonus.granted) {
+      void playStreakBonusFeedback();
+    }
     setVictorySummary({
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
       elapsedMs,
       mistakes,
+      sessionStreak: completionResult.sessionStreak,
+      streakBonusTitle: completionResult.streakBonus.granted
+        ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+        : undefined,
+      streakBonusLabel: completionResult.streakBonus.granted
+        ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+        : undefined,
     });
+    setXpTotal((prev) => prev + completionResult.earnedXp);
+    setNeuroCoins((prev) => prev + completionResult.earnedSp);
     setVictoryVisible(true);
     setFinishing(false);
   };
@@ -431,6 +467,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
 
     if (nextGameOver) {
       void playDefeatFeedback();
+      resetSessionStreak();
       await trackGameOver({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal', difficulty, durationMs: elapsedMs, mistakes: nextMistakes });
       await updateNeuroAfterGame({
         gameId: 'sudoku',
@@ -486,7 +523,30 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setShowErrors(false);
     setCompletionPulse(EMPTY_UNIT_COMPLETION_PULSE);
     setCompletionPulseVisible(false);
+    setRecoverMistakeUses(0);
+    setEconomyFeedback(null);
     trackSessionStart({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal' });
+  };
+
+  const handleRecoverMistake = async () => {
+    if (dailyBlockedReason || didWin || gameOver) return;
+    if (recoverMistakeUses >= MAX_RECOVER_MISTAKE_USES) return;
+    if (mistakes <= 0) {
+      Alert.alert('Sin fallos', 'Aún no tienes fallos para recuperar.');
+      return;
+    }
+
+    const result = await spendNeuroCoins(NEURO_COIN_COSTS.sudokuRecoverMistake, 'sudoku_recover_mistake');
+    if (!result.success) {
+      Alert.alert('Saldo insuficiente', 'No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setMistakes((prev) => Math.max(0, prev - 1));
+    setRecoverMistakeUses((prev) => prev + 1);
+    setNeuroCoins(result.newBalance);
+    setEconomyFeedback(`-${NEURO_COIN_COSTS.sudokuRecoverMistake} 🪙`);
+    void playSuccessFeedback();
   };
 
   const checkBoard = async () => {
@@ -550,6 +610,9 @@ export default function SudokuScreen({ route, navigation }: Props) {
             </Text>
             {gameOver ? <Text style={{ color: theme.colors.danger, marginTop: 2, fontSize: 12 }} numberOfLines={2}>Entrada bloqueada por límite de fallos.</Text> : null}
           </Card>
+          <View style={{ marginTop: 8 }}>
+            <PlayerEconomyBar xp={xpTotal} neuroCoins={neuroCoins} compact />
+          </View>
         </View>
 
         {dailyBlockedReason ? (
@@ -621,6 +684,22 @@ export default function SudokuScreen({ route, navigation }: Props) {
               style={{ flex: 1, minHeight: compactLayout ? 38 : 44, paddingVertical: compactLayout ? 6 : 8, paddingHorizontal: 8 }}
             />
           </View>
+
+          <View style={{ marginTop: controlsGap }}>
+            <NeuroCoinActionButton
+              label="Recuperar fallo"
+              icon="🩹"
+              cost={NEURO_COIN_COSTS.sudokuRecoverMistake}
+              usesLeft={MAX_RECOVER_MISTAKE_USES - recoverMistakeUses}
+              disabled={
+                gameOver || didWin || mistakes <= 0 || recoverMistakeUses >= MAX_RECOVER_MISTAKE_USES || !!dailyBlockedReason
+              }
+              onPress={handleRecoverMistake}
+            />
+            {economyFeedback ? (
+              <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text>
+            ) : null}
+          </View>
           </Card>
         </View>
         ) : null}
@@ -641,25 +720,38 @@ export default function SudokuScreen({ route, navigation }: Props) {
         subtitle="Tablero limpio y victoria asegurada."
         metrics={[
           { label: 'XP', value: `+${victorySummary?.earnedXp ?? 0}` },
-          { label: 'SP', value: `+${victorySummary?.earnedSp ?? 0}` },
+          { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(victorySummary?.earnedSp ?? 0) },
           { label: 'Tiempo', value: msToClock(victorySummary?.elapsedMs ?? 0) },
           { label: 'Fallos', value: victorySummary?.mistakes ?? 0 },
         ]}
+        sessionStreak={victorySummary?.sessionStreak ?? 0}
+        streakBonusTitle={victorySummary?.streakBonusTitle}
+        streakBonusText={victorySummary?.streakBonusLabel}
         primaryAction={{
-          label: 'Nueva partida',
+          label: 'Siguiente reto',
+          onPress: () => {
+            setVictoryVisible(false);
+            navigateToNextChallenge(navigation, 'sudoku', difficulty);
+          },
+        }}
+        secondaryAction={{
+          label: 'Jugar de nuevo',
+          variant: 'secondary',
           onPress: () => {
             setVictoryVisible(false);
             handleNew();
           },
         }}
-        secondaryAction={{
-          label: 'Ver ranking local',
-          variant: 'secondary',
-          onPress: () => {
-            setVictoryVisible(false);
-            navigation.navigate('Leaderboard');
+        auxiliaryActions={[
+          {
+            label: 'Ver ranking local',
+            variant: 'ghost',
+            onPress: () => {
+              setVictoryVisible(false);
+              navigation.navigate('Leaderboard');
+            },
           },
-        }}
+        ]}
       />
     </>
   );

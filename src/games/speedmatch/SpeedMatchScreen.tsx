@@ -16,8 +16,11 @@ import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { clearSpeedMatchState, getSpeedMatchState, saveSpeedMatchState } from './storage/speedmatchState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
 
@@ -30,6 +33,9 @@ type ResultSummary = {
   score: number;
   won: boolean;
   accuracyPct: number;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 const SYMBOL_LIBRARY = ['●', '■', '▲', '◆', '★', '✚', '⬢', '◉', '☼'];
@@ -259,6 +265,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       difficulty,
     });
     const won = evaluateSpeedMatchWin({ correct, mistakes, difficulty });
+    const rewardMultiplier = won ? 1 : correct === 0 ? 0 : 0.5;
 
     if (won) {
       await trackWin({
@@ -276,6 +283,8 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       difficulty,
       mode: isDaily ? 'daily' : 'normal',
       won,
+      rewardMultiplier,
+      streakPolicy: won ? 'increment' : 'keep',
       stageIndex,
       metrics: {
         durationMs: elapsedMs,
@@ -302,6 +311,9 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     setSessionStarted(false);
     if (won) void playVictoryFeedback();
     else void playDefeatFeedback();
+    if (completionResult.streakBonus.granted) {
+      void playStreakBonusFeedback();
+    }
     setResultSummary({
       earnedXp: completionResult.earnedXp,
       earnedSp: completionResult.earnedSp,
@@ -311,6 +323,13 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       score: rewardScore,
       won,
       accuracyPct,
+      sessionStreak: completionResult.sessionStreak,
+      streakBonusTitle: completionResult.streakBonus.granted
+        ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+        : undefined,
+      streakBonusLabel: completionResult.streakBonus.granted
+        ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+        : undefined,
     });
     setResultVisible(true);
     setFinishing(false);
@@ -388,6 +407,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   return (
     <>
       <Screen>
+        <PlayerEconomyBar compact />
         <Card variant="cyan">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
@@ -448,23 +468,36 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
           { label: 'Precisión', value: `${resultSummary?.accuracyPct ?? 0}%` },
           { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
           { label: 'XP', value: `+${resultSummary?.earnedXp ?? 0}` },
-          { label: 'SP', value: `+${resultSummary?.earnedSp ?? 0}` },
+          { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(resultSummary?.earnedSp ?? 0) },
         ]}
+        sessionStreak={resultSummary?.sessionStreak ?? 0}
+        streakBonusTitle={resultSummary?.streakBonusTitle}
+        streakBonusText={resultSummary?.streakBonusLabel}
         primaryAction={{
-          label: 'Jugar de nuevo',
+            label: 'Siguiente reto',
           onPress: () => {
             setResultVisible(false);
-            restart();
+              navigateToNextChallenge(navigation, 'speedmatch', difficulty);
           },
         }}
         secondaryAction={{
-          label: 'Ver ranking local',
+            label: 'Jugar de nuevo',
           variant: 'secondary',
           onPress: () => {
             setResultVisible(false);
-            navigation.navigate('Leaderboard');
+              restart();
           },
         }}
+        auxiliaryActions={[
+          {
+            label: 'Ver ranking local',
+            variant: 'ghost',
+            onPress: () => {
+              setResultVisible(false);
+              navigation.navigate('Leaderboard');
+            },
+          },
+        ]}
       />
     </>
   );

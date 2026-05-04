@@ -1,6 +1,13 @@
 import { triggerCelebration } from './celebration';
-import { triggerDefeatHaptic, triggerErrorHaptic, triggerSuccessHaptic, triggerVictoryHaptic } from './haptics';
-import { playDefeatSound, playErrorSound, playSuccessSound, playVictorySound } from './sounds';
+import {
+  triggerDailyCompleteHaptic,
+  triggerDefeatHaptic,
+  triggerErrorHaptic,
+  triggerStreakBonusHaptic,
+  triggerSuccessHaptic,
+  triggerVictoryHaptic,
+} from './haptics';
+import { playDailyCompleteSound, playDefeatSound, playErrorSound, playStreakBonusSound, playSuccessSound, playVictorySound } from './sounds';
 import { FocusAudioMode, setFocusAudioMode, stopFocusAmbient } from './focusAudio';
 
 export type GameFeedbackPreferences = {
@@ -79,4 +86,40 @@ export async function playSuccessFeedback() {
 
   if (prefs.soundEnabled) await playSuccessSound();
   if (prefs.hapticsEnabled) await triggerSuccessHaptic();
+}
+
+export async function playStreakBonusFeedback() {
+  if (!prefs.enabled) return;
+
+  if (prefs.celebrationEnabled) triggerCelebration({ durationMs: 900, particleCount: 24 });
+
+  const tasks: Array<Promise<unknown>> = [];
+  if (prefs.soundEnabled) {
+    tasks.push(playStreakBonusSound());
+  }
+  if (prefs.hapticsEnabled) {
+    tasks.push(triggerStreakBonusHaptic());
+  }
+
+  if (tasks.length > 0) {
+    await Promise.allSettled(tasks);
+  }
+}
+
+export async function playDailyChallengeCompleteFeedback() {
+  if (!prefs.enabled) return;
+
+  if (prefs.celebrationEnabled) triggerCelebration({ durationMs: 1600, particleCount: 40 });
+
+  const tasks: Array<Promise<unknown>> = [];
+  if (prefs.soundEnabled) {
+    tasks.push(wait(30).then(() => playDailyCompleteSound()));
+  }
+  if (prefs.hapticsEnabled) {
+    tasks.push(wait(30).then(() => triggerDailyCompleteHaptic()));
+  }
+
+  if (tasks.length > 0) {
+    await Promise.allSettled(tasks);
+  }
 }

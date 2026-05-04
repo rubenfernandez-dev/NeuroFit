@@ -27,8 +27,12 @@ import {
 import { PatternMemoryFinishReason, PatternMemoryGameResult, TileId } from './types';
 import { clearPatternMemoryState, getPatternMemoryState, savePatternMemoryState } from './storage/patternMemoryState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
-import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { resetSessionStreak } from '../../shared/session/sessionStreak';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatternMemory'>;
 
@@ -45,6 +49,9 @@ type ResultSummary = {
   spGained: number;
   performance: number;
   gameResult: PatternMemoryGameResult;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 const TILE_IDS: TileId[] = [0, 1, 2, 3];
@@ -370,6 +377,8 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         difficulty,
         mode: isDaily ? 'daily' : 'normal',
         won,
+        rewardMultiplier: won ? 1 : correctTaps === 0 ? 0 : 0.5,
+        streakPolicy: won ? 'increment' : 'keep',
         stageIndex,
         metrics: {
           durationMs: elapsedMs,
@@ -433,6 +442,9 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
       await clearPatternMemoryState();
       setSessionStarted(false);
+      if (completionResult.streakBonus.granted) {
+        void playStreakBonusFeedback();
+      }
       setResultSummary({
         elapsedMs,
         score,
@@ -444,6 +456,13 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         spGained: completionResult.earnedSp,
         performance,
         gameResult,
+        sessionStreak: completionResult.sessionStreak,
+        streakBonusTitle: completionResult.streakBonus.granted
+          ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+          : undefined,
+        streakBonusLabel: completionResult.streakBonus.granted
+          ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+          : undefined,
       });
       setResultVisible(true);
       setFinishing(false);
@@ -570,8 +589,11 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
   const exitGame = useCallback(() => {
     clearPlaybackQueue();
+    if (sessionStarted && !didFinish) {
+      resetSessionStreak();
+    }
     navigation.navigate(isDaily ? 'DailyChallenge' : 'Games');
-  }, [clearPlaybackQueue, isDaily, navigation]);
+  }, [clearPlaybackQueue, didFinish, isDaily, navigation, sessionStarted]);
 
   const accuracy = calcAccuracy(correctTaps, totalTaps);
   const reactionTimeAvg = calcReactionTimeAvg(reactionAccumMs, reactionSamples);
@@ -579,6 +601,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
   return (
     <>
       <Screen>
+        <PlayerEconomyBar compact />
         <Card variant="primary">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Pattern Memory · {difficultyLabel(difficulty)}</Text>
@@ -684,23 +707,44 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
           { label: 'RT medio', value: `${resultSummary?.reactionTimeAvg ?? 0} ms` },
           { label: 'Tiempo', value: msToClock(resultSummary?.elapsedMs ?? 0) },
           { label: 'XP', value: `+${resultSummary?.xpGained ?? 0}` },
-          { label: 'SP', value: `+${resultSummary?.spGained ?? 0}` },
+          { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(resultSummary?.spGained ?? 0) },
         ]}
+        sessionStreak={resultSummary?.sessionStreak ?? 0}
+        streakBonusTitle={resultSummary?.streakBonusTitle}
+        streakBonusText={resultSummary?.streakBonusLabel}
         primaryAction={{
+          label: 'Siguiente reto',
+          onPress: () => {
+            setResultVisible(false);
+            navigateToNextChallenge(navigation, 'patternmemory', difficulty);
+          },
+        }}
+        secondaryAction={{
           label: 'Jugar de nuevo',
+          variant: 'secondary',
           onPress: () => {
             setResultVisible(false);
             restart();
           },
         }}
-        secondaryAction={{
-          label: 'Ver ranking local',
-          variant: 'secondary',
-          onPress: () => {
-            setResultVisible(false);
-            navigation.navigate('Leaderboard');
+        auxiliaryActions={[
+          {
+            label: 'Ver ranking local',
+            variant: 'ghost',
+            onPress: () => {
+              setResultVisible(false);
+              navigation.navigate('Leaderboard');
+            },
           },
-        }}
+          {
+            label: 'Salir',
+            variant: 'ghost',
+            onPress: () => {
+              setResultVisible(false);
+              exitGame();
+            },
+          },
+        ]}
       />
     </>
   );

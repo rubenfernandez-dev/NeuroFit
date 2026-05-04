@@ -17,6 +17,9 @@ import Pill from '../shared/ui/Pill';
 import Screen from '../shared/ui/Screen';
 import StreakWidget from '../shared/ui/StreakWidget';
 import XPLevelIndicator from '../shared/ui/XPLevelIndicator';
+import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
+import { formatNeuroCoins } from '../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type Snapshot = {
   xpTotal: number;
@@ -198,6 +201,10 @@ export default function ProgressScreen() {
   return (
     <Screen>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+        <View style={{ marginHorizontal: 16, marginBottom: 12 }}>
+          <PlayerEconomyBar xp={snapshot.xpTotal} neuroCoins={snapshot.seasonPoints} />
+        </View>
+
         {/* ERROR STATE */}
         {loadError ? (
           <Card variant="warning" style={{ margin: 16 }}>
@@ -303,7 +310,7 @@ export default function ProgressScreen() {
                 Competencia semanal
               </Text>
             </View>
-            <Pill label={`${snapshot.seasonPoints.toLocaleString()} SP`} tone="cyan" />
+            <NeuroCoinBadge amount={snapshot.seasonPoints} compact />
           </View>
 
           <View style={{ marginTop: 12, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
@@ -315,7 +322,7 @@ export default function ProgressScreen() {
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
               <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Hacia Top 10</Text>
               <Text style={[theme.typography.caption, { color: theme.colors.textMuted, fontWeight: '600' }]}>
-                {distanceToTop10 > 0 ? `Faltan ${distanceToTop10}` : 'Objetivo alcanzado'}
+                {distanceToTop10 > 0 ? `Faltan ${formatNeuroCoins(distanceToTop10)}` : 'Objetivo alcanzado'}
               </Text>
             </View>
             <AnimatedProgressBar
@@ -334,6 +341,7 @@ export default function ProgressScreen() {
           >
             Top 10 ascienden • Últimos 10 descienden
           </Text>
+          <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 6 }]}>Pronto podrás usar tus NeuroCoins en partida.</Text>
         </Card>
 
         {/* E) ESTADÍSTICAS GENERALES */}

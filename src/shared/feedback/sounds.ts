@@ -1,13 +1,15 @@
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { logWarning } from '../observability';
 
-type SoundKind = 'victory' | 'defeat' | 'error' | 'success';
+type SoundKind = 'victory' | 'defeat' | 'error' | 'success' | 'streak_bonus' | 'daily_complete';
 
 const SOUND_ASSETS: Record<SoundKind, number> = {
   victory: require('../../../assets/feedback/victory.wav'),
   defeat: require('../../../assets/feedback/defeat.wav'),
   error: require('../../../assets/feedback/error.wav'),
   success: require('../../../assets/feedback/success.wav'),
+  streak_bonus: require('../../../assets/feedback/success.wav'),
+  daily_complete: require('../../../assets/feedback/victory.wav'),
 };
 
 const SOUND_VOLUME: Record<SoundKind, number> = {
@@ -15,6 +17,8 @@ const SOUND_VOLUME: Record<SoundKind, number> = {
   defeat: 0.4,
   error: 0.3,
   success: 0.2,
+  streak_bonus: 0.48,
+  daily_complete: 0.92,
 };
 
 let audioConfigured = false;
@@ -72,4 +76,12 @@ export async function playErrorSound() {
 
 export async function playSuccessSound() {
   await playSound('success');
+}
+
+export async function playStreakBonusSound() {
+  await playSound('streak_bonus');
+}
+
+export async function playDailyCompleteSound() {
+  await playSound('daily_complete');
 }

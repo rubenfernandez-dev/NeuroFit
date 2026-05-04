@@ -2,6 +2,7 @@ import React from 'react';
 import { msToClock } from '../../../shared/utils/time';
 import GameResultModal from '../../../shared/feedback/GameResultModal';
 import { FocusGridGameResult } from '../types';
+import { formatNeuroCoinRewardCompact } from '../../../shared/economy/neuroCoins';
 
 type ResultSummary = {
   elapsedMs: number;
@@ -14,22 +15,29 @@ type ResultSummary = {
   spGained: number;
   performance: number;
   gameResult: FocusGridGameResult;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 type Props = {
   visible: boolean;
   resultSummary: ResultSummary | null;
   onClose: () => void;
+  onNextChallenge: () => void;
   onRestart: () => void;
   onViewLeaderboard: () => void;
+  onExit?: () => void;
 };
 
 export default function FocusGridResultModal({
   visible,
   resultSummary,
   onClose,
+  onNextChallenge,
   onRestart,
   onViewLeaderboard,
+  onExit,
 }: Props) {
   return (
     <GameResultModal
@@ -45,10 +53,17 @@ export default function FocusGridResultModal({
         { label: 'Tiempo completado', value: msToClock(resultSummary?.completionTimeMs ?? 0) },
         { label: 'Duración', value: msToClock(resultSummary?.elapsedMs ?? 0) },
         { label: 'XP', value: `+${resultSummary?.xpGained ?? 0}` },
-        { label: 'SP', value: `+${resultSummary?.spGained ?? 0}` },
+        { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(resultSummary?.spGained ?? 0) },
       ]}
-      primaryAction={{ label: 'Jugar de nuevo', onPress: onRestart }}
-      secondaryAction={{ label: 'Ver ranking local', onPress: onViewLeaderboard, variant: 'secondary' }}
+      sessionStreak={resultSummary?.sessionStreak ?? 0}
+      streakBonusTitle={resultSummary?.streakBonusTitle}
+      streakBonusText={resultSummary?.streakBonusLabel}
+      primaryAction={{ label: 'Siguiente reto', onPress: onNextChallenge }}
+      secondaryAction={{ label: 'Jugar de nuevo', onPress: onRestart, variant: 'secondary' }}
+      auxiliaryActions={[
+        { label: 'Ver ranking local', onPress: onViewLeaderboard, variant: 'ghost' },
+        ...(onExit ? [{ label: 'Salir', onPress: onExit, variant: 'ghost' as const }] : []),
+      ]}
     />
   );
 }

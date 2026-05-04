@@ -16,6 +16,9 @@ import { captureException, classifyDataFailure, formatLoadFailureMessage } from 
 import { formatDurationMsToSeconds, formatHumanDate } from '../shared/utils/dateFormatter';
 import StreakWidget from '../shared/ui/StreakWidget';
 import DailyChallengeStageCard from '../shared/ui/DailyChallengeStageCard';
+import { playDailyChallengeCompleteFeedback } from '../shared/feedback/gameFeedback';
+import { formatNeuroCoinRewardCompact } from '../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'DailyChallenge'>;
 
@@ -168,12 +171,15 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   const completion = route.params?.completion;
   const [daily, setDaily] = useState<Awaited<ReturnType<typeof ensureDailyToday>> | null>(null);
   const [streakCurrent, setStreakCurrent] = useState(0);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [seasonPoints, setSeasonPoints] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showFinalConfetti, setShowFinalConfetti] = useState(completion?.kind === 'final');
   const rewardScale = useRef(new Animated.Value(1)).current;
   const autoAdvanceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const finalFeedbackPlayedRef = useRef(false);
 
   const clearCompletion = useCallback(() => {
     navigation.replace('DailyChallenge');
@@ -221,6 +227,8 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
       if (!mountedRef.current) return;
       setDaily(dailyState);
       setStreakCurrent(profile.streakCurrent);
+      setXpTotal(profile.xpTotal);
+      setSeasonPoints(profile.seasonPoints);
       setLoadError(null);
     } catch (error) {
       if (!mountedRef.current) return;
@@ -243,6 +251,17 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     setShowFinalConfetti(completion?.kind === 'final');
+  }, [completion?.kind]);
+
+  useEffect(() => {
+    if (completion?.kind !== 'final') {
+      finalFeedbackPlayedRef.current = false;
+      return;
+    }
+    if (finalFeedbackPlayedRef.current) return;
+
+    finalFeedbackPlayedRef.current = true;
+    void playDailyChallengeCompleteFeedback();
   }, [completion?.kind]);
 
   useEffect(() => {
@@ -316,6 +335,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   if (completion?.kind === 'stage') {
     return (
       <Screen scroll={false} contentStyle={{ flex: 1, justifyContent: 'center' }}>
+        <PlayerEconomyBar xp={xpTotal} neuroCoins={seasonPoints} compact />
         <Card variant="success" style={{ alignItems: 'center' }}>
           <Text style={{ fontSize: 58 }}>✅</Text>
           <Text style={[theme.typography.h2, { color: theme.colors.text, marginTop: 8 }]}>Etapa completada</Text>
@@ -325,7 +345,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
 
           <View style={{ marginTop: 14, flexDirection: 'row', gap: 10 }}>
             <Pill label={`+${completion.earnedXp} XP`} tone="pink" />
-            <Pill label={`+${completion.earnedSp} SP`} tone="cyan" />
+            <Pill label={formatNeuroCoinRewardCompact(completion.earnedSp)} tone="cyan" />
           </View>
 
           <View style={{ width: '100%', marginTop: 14 }}>
@@ -361,6 +381,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
   if (completion?.kind === 'final') {
     return (
       <Screen scroll={false} contentStyle={{ flex: 1, justifyContent: 'center' }}>
+        <PlayerEconomyBar xp={xpTotal} neuroCoins={seasonPoints} compact />
         <ConfettiSimple enabled={showFinalConfetti} durationMs={1600} particleCount={20} onDone={() => setShowFinalConfetti(false)} />
         <Card variant="primary" style={{ alignItems: 'center' }}>
           <Animated.Text style={{ fontSize: 58, transform: [{ scale: rewardScale }] }}>🎉</Animated.Text>
@@ -369,7 +390,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
 
           <View style={{ marginTop: 14, flexDirection: 'row', gap: 10 }}>
             <Pill label={`+${completion.earnedXp} XP total`} tone="pink" />
-            <Pill label={`+${completion.earnedSp} SP total`} tone="cyan" />
+            <Pill label={`${formatNeuroCoinRewardCompact(completion.earnedSp)} total`} tone="cyan" />
           </View>
 
           <Text style={[theme.typography.h3, { color: theme.colors.text, marginTop: 14 }]}>
@@ -386,6 +407,7 @@ export default function DailyChallengeScreen({ navigation, route }: Props) {
 
   return (
     <Screen>
+      <PlayerEconomyBar xp={xpTotal} neuroCoins={seasonPoints} compact />
       <Card variant="primary">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Reto de hoy · {formatHumanDate(daily.lastDailyDateISO)}</Text>
 

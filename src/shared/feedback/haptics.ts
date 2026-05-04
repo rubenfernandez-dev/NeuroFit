@@ -31,3 +31,14 @@ export async function triggerErrorHaptic() {
 export async function triggerSuccessHaptic() {
   await safeHaptic(() => Haptics.selectionAsync());
 }
+
+export async function triggerStreakBonusHaptic() {
+  await safeHaptic(async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (Platform.OS === 'android') Vibration.vibrate(24);
+  });
+}
+
+export async function triggerDailyCompleteHaptic() {
+  await safeHaptic(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+}

@@ -14,6 +14,7 @@ import Button from '../shared/ui/Button';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 import { GAME_CATEGORIES } from '../shared/theme/categoryColors';
 import GameListItem from '../shared/ui/GameListItem';
+import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Games'>;
 
@@ -34,6 +35,8 @@ export default function GamesScreen({ navigation }: Props) {
   const [selectedDifficulty, setSelectedDifficulty] = React.useState<Difficulty>('principiante');
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = React.useState(0);
+  const [xpTotal, setXpTotal] = React.useState(0);
+  const [seasonPoints, setSeasonPoints] = React.useState(0);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -41,6 +44,8 @@ export default function GamesScreen({ navigation }: Props) {
         try {
           const profile = await getProfile();
           setPreferred(profile.preferredDifficultyByGame);
+          setXpTotal(profile.xpTotal);
+          setSeasonPoints(profile.seasonPoints);
           setLoadError(null);
         } catch (error) {
           const kind = classifyDataFailure(error);
@@ -90,6 +95,8 @@ export default function GamesScreen({ navigation }: Props) {
 
   return (
     <Screen contentStyle={{ padding: 12, gap: 8 }}>
+      <PlayerEconomyBar xp={xpTotal} neuroCoins={seasonPoints} compact />
+
       {loadError ? (
         <Card variant="warning">
           <Text style={[theme.typography.bodySmall, { color: theme.colors.red }]}>{loadError}</Text>

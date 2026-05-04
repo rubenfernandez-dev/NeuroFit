@@ -12,7 +12,7 @@ import { msToClock, nowISO } from '../../shared/utils/time';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { trackNumberMatchResult, trackSessionStart } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
-import { playDefeatFeedback, playErrorFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
+import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 import {
   addLineFromRemaining,
@@ -29,6 +29,10 @@ import {
 import { clearNumberMatchState, getNumberMatchState, saveNumberMatchState } from './numberMatchState';
 import { NumberMatchFinishReason, NumberMatchGameResult } from './types';
 import { computePerformanceFromScore } from '../../core/gamification/economy';
+import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { resetSessionStreak } from '../../shared/session/sessionStreak';
+import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberMatch'>;
 
@@ -54,6 +58,9 @@ type ResultSummary = {
   spGained: number;
   performance: number;
   gameResult: NumberMatchGameResult;
+  sessionStreak: number;
+  streakBonusTitle?: string;
+  streakBonusLabel?: string;
 };
 
 function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
@@ -307,6 +314,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       difficulty,
       mode: isDaily ? 'daily' : 'normal',
       won,
+      rewardMultiplier: won ? 1 : validMatches === 0 ? 0 : 0.5,
+      streakPolicy: won ? 'increment' : 'keep',
       stageIndex,
       metrics: {
         durationMs: elapsedMs,
@@ -349,6 +358,9 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
     await clearNumberMatchState();
     setSessionStarted(false);
+    if (completionResult.streakBonus.granted) {
+      void playStreakBonusFeedback();
+    }
     setResultSummary({
       elapsedMs,
       rewardScore,
@@ -363,6 +375,13 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       spGained: completionResult.earnedSp,
       performance,
       gameResult,
+      sessionStreak: completionResult.sessionStreak,
+      streakBonusTitle: completionResult.streakBonus.granted
+        ? `🔥 RACHA x${completionResult.streakBonus.milestone ?? completionResult.sessionStreak} COMPLETADA`
+        : undefined,
+      streakBonusLabel: completionResult.streakBonus.granted
+        ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
+        : undefined,
     });
     setResultVisible(true);
     setFinishing(false);
@@ -486,14 +505,18 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
   const exitGame = useCallback(() => {
     clearFeedback();
+    if (sessionStarted && !didFinish) {
+      resetSessionStreak();
+    }
     navigation.navigate(isDaily ? 'DailyChallenge' : 'Games');
-  }, [clearFeedback, isDaily, navigation]);
+  }, [clearFeedback, didFinish, isDaily, navigation, sessionStarted]);
 
   const boardClearedPercent = computeBoardClearedPercent(board);
 
   return (
     <>
       <Screen>
+        <PlayerEconomyBar compact />
         <Card variant="primary">
           <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Number Match · {difficultyLabel(difficulty)}</Text>
           <View style={{ marginTop: 8 }}>
@@ -599,23 +622,45 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
           { label: 'Mejor combo', value: resultSummary?.bestCombo ?? 0 },
           { label: 'Lineas usadas', value: resultSummary?.linesUsed ?? 0 },
           { label: 'Tablero despejado', value: `${resultSummary?.boardClearedPercent ?? 0}%` },
-          { label: 'XP', value: resultSummary?.xpGained ?? 0 },
-          { label: 'SP', value: resultSummary?.spGained ?? 0 },
+          { label: 'XP', value: `+${resultSummary?.xpGained ?? 0}` },
+          { label: 'NC 🪙', value: formatNeuroCoinRewardCompact(resultSummary?.spGained ?? 0) },
         ]}
+        sessionStreak={resultSummary?.sessionStreak ?? 0}
+        streakBonusTitle={resultSummary?.streakBonusTitle}
+        streakBonusText={resultSummary?.streakBonusLabel}
         primaryAction={{
-          label: 'Reintentar',
+          label: 'Siguiente reto',
+          onPress: () => {
+            setResultVisible(false);
+            navigateToNextChallenge(navigation, 'numbermatch', difficulty);
+          },
+        }}
+        secondaryAction={{
+          label: 'Jugar de nuevo',
+          variant: 'secondary',
           onPress: () => {
             setResultVisible(false);
             void restart();
           },
         }}
-        secondaryAction={{
-          label: 'Salir',
-          onPress: () => {
-            setResultVisible(false);
-            exitGame();
+        auxiliaryActions={[
+          {
+            label: 'Ver ranking local',
+            variant: 'ghost',
+            onPress: () => {
+              setResultVisible(false);
+              navigation.navigate('Leaderboard');
+            },
           },
-        }}
+          {
+            label: 'Salir',
+            variant: 'ghost',
+            onPress: () => {
+              setResultVisible(false);
+              exitGame();
+            },
+          },
+        ]}
       />
     </>
   );

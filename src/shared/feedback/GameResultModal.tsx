@@ -26,6 +26,10 @@ type GameResultModalProps = {
   metrics: MetricRow[];
   primaryAction: Action;
   secondaryAction?: Action;
+  auxiliaryActions?: Action[];
+  sessionStreak?: number;
+  streakBonusTitle?: string;
+  streakBonusText?: string;
 };
 
 export default function GameResultModal({
@@ -37,6 +41,10 @@ export default function GameResultModal({
   metrics,
   primaryAction,
   secondaryAction,
+  auxiliaryActions,
+  sessionStreak,
+  streakBonusTitle,
+  streakBonusText,
 }: GameResultModalProps) {
   const { theme } = useAppTheme();
   const entrance = useRef(new Animated.Value(0)).current;
@@ -179,17 +187,66 @@ export default function GameResultModal({
                   <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{metric.value}</Text>
                 </View>
               ))}
+
+              {typeof sessionStreak === 'number' ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+                  <Text style={{ color: theme.colors.textMuted }}>🔥 Racha de sesión</Text>
+                  <Text style={{ color: theme.colors.text, fontWeight: '800' }}>{sessionStreak}</Text>
+                </View>
+              ) : null}
+
+              {streakBonusTitle || streakBonusText ? (
+                <View
+                  style={{
+                    marginTop: 12,
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    borderColor: '#F59E0B',
+                    backgroundColor: theme.mode === 'dark' ? 'rgba(249,115,22,0.18)' : 'rgba(251,146,60,0.16)',
+                    shadowColor: '#F59E0B',
+                    shadowOpacity: theme.mode === 'dark' ? 0.42 : 0.28,
+                    shadowRadius: 16,
+                    shadowOffset: { width: 0, height: 6 },
+                    elevation: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                  }}
+                >
+                  {streakBonusTitle ? <Text style={{ color: '#FDE68A', fontWeight: '900', letterSpacing: 0.6 }}>{streakBonusTitle}</Text> : null}
+                  {streakBonusText ? <Text style={{ color: theme.colors.text, fontWeight: '700', marginTop: streakBonusTitle ? 4 : 0 }}>{streakBonusText}</Text> : null}
+                </View>
+              ) : null}
             </View>
 
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
-              <Button title={primaryAction.label} onPress={primaryAction.onPress} variant={primaryAction.variant ?? 'primary'} style={{ flex: 1 }} />
-              {secondaryAction ? (
-                <Button
-                  title={secondaryAction.label}
-                  onPress={secondaryAction.onPress}
-                  variant={secondaryAction.variant ?? 'secondary'}
-                  style={{ flex: 1 }}
-                />
+            <View style={{ marginTop: 16 }}>
+              <Button
+                title={primaryAction.label}
+                onPress={primaryAction.onPress}
+                variant={primaryAction.variant ?? 'primary'}
+                style={{ width: '100%' }}
+              />
+
+              {secondaryAction || (auxiliaryActions && auxiliaryActions.length > 0) ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                  {secondaryAction ? (
+                    <Button
+                      title={secondaryAction.label}
+                      onPress={secondaryAction.onPress}
+                      variant={secondaryAction.variant ?? 'secondary'}
+                      style={{ flex: 1 }}
+                    />
+                  ) : null}
+
+                  {(auxiliaryActions ?? []).map((action) => (
+                    <Button
+                      key={action.label}
+                      title={action.label}
+                      onPress={action.onPress}
+                      variant={action.variant ?? 'ghost'}
+                      style={{ flex: 1 }}
+                    />
+                  ))}
+                </View>
               ) : null}
             </View>
           </Card>
