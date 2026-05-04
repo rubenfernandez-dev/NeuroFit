@@ -11,6 +11,7 @@ import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import { computePerformanceFromScore } from '../../core/gamification/economy';
 import { trackPatternMemoryResult, trackSessionStart } from '../../shared/storage/stats';
 import {
@@ -31,8 +32,13 @@ import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuc
 import GameResultModal from '../../shared/feedback/GameResultModal';
 import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
 import { resetSessionStreak } from '../../shared/session/sessionStreak';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatternMemory'>;
 
@@ -52,6 +58,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 const TILE_IDS: TileId[] = [0, 1, 2, 3];
@@ -96,6 +103,11 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
   const [resultVisible, setResultVisible] = useState(false);
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [repeatUses, setRepeatUses] = useState(0);
+  const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
+  const MAX_REPEAT_USES = 2;
 
   const tileBaseColors = useMemo(
     () => [theme.colors.primary, theme.colors.cyan, theme.colors.pink, theme.colors.orange],
@@ -183,8 +195,10 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       setFinishing(false);
       setResultVisible(false);
       setResultSummary(null);
+      setRepeatUses(0);
+      clearEconomyFeedback();
     },
-    [config.totalSeconds],
+    [clearEconomyFeedback, config.totalSeconds],
   );
 
   useEffect(() => {
@@ -220,6 +234,11 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
         await markDailyStageStarted({ stageIndex, gameId: 'patternmemory' });
       }
+
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
 
       const saved = await getPatternMemoryState();
       if (
@@ -463,7 +482,10 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         streakBonusLabel: completionResult.streakBonus.granted
           ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
           : undefined,
+        rewardChest: completionResult.rewardChest,
       });
+      setXpTotal((prev) => prev + completionResult.earnedXp);
+      setNeuroCoins((prev) => prev + completionResult.earnedSp);
       setResultVisible(true);
       setFinishing(false);
     },
@@ -587,6 +609,25 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     await trackSessionStart({ gameId: 'patternmemory', mode: 'normal' });
   }, [clearPlaybackQueue, isDaily, prepareFreshSession]);
 
+  const handleRepeatSequence = useCallback(async () => {
+    if (dailyBlockedReason || didFinish || finishing || sequence.length === 0) return;
+    if (repeatUses >= MAX_REPEAT_USES) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.patternMemoryRepeatSequence, 'pattern_memory_repeat_sequence');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setNeuroCoins(spendResult.newBalance);
+    setRepeatUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.patternMemoryRepeatSequence);
+
+    setInputIndex(0);
+    setPromptAtMs(0);
+    playSequence(sequence);
+  }, [dailyBlockedReason, didFinish, finishing, playSequence, repeatUses, sequence, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+
   const exitGame = useCallback(() => {
     clearPlaybackQueue();
     if (sessionStarted && !didFinish) {
@@ -601,7 +642,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
   return (
     <>
       <Screen>
-        <PlayerEconomyBar compact />
+        <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card variant="primary">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Pattern Memory · {difficultyLabel(difficulty)}</Text>
@@ -623,6 +664,20 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
             Bono: +{CORRECT_TAP_BONUS_SEC}s por acierto
           </Text>
         </Card>
+
+        {!dailyBlockedReason ? (
+          <Card style={{ padding: 10 }}>
+            <NeuroCoinActionButton
+              label="Repetir"
+              icon="🔁"
+              cost={NEURO_COIN_COSTS.patternMemoryRepeatSequence}
+              usesLeft={MAX_REPEAT_USES - repeatUses}
+              disabled={didFinish || finishing || sequence.length === 0 || repeatUses >= MAX_REPEAT_USES}
+              onPress={handleRepeatSequence}
+            />
+            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
+          </Card>
+        ) : null}
 
         {dailyBlockedReason ? (
           <Card>
@@ -712,6 +767,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         sessionStreak={resultSummary?.sessionStreak ?? 0}
         streakBonusTitle={resultSummary?.streakBonusTitle}
         streakBonusText={resultSummary?.streakBonusLabel}
+        rewardChest={resultSummary?.rewardChest}
         primaryAction={{
           label: 'Siguiente reto',
           onPress: () => {

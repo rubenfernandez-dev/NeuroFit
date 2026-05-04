@@ -3,6 +3,7 @@ import { msToClock } from '../../../shared/utils/time';
 import GameResultModal from '../../../shared/feedback/GameResultModal';
 import { FocusGridGameResult } from '../types';
 import { formatNeuroCoinRewardCompact } from '../../../shared/economy/neuroCoins';
+import { RewardChestGrant } from '../../../shared/gamification/rewardChest';
 
 type ResultSummary = {
   elapsedMs: number;
@@ -18,6 +19,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 type Props = {
@@ -58,6 +60,7 @@ export default function FocusGridResultModal({
       sessionStreak={resultSummary?.sessionStreak ?? 0}
       streakBonusTitle={resultSummary?.streakBonusTitle}
       streakBonusText={resultSummary?.streakBonusLabel}
+      rewardChest={resultSummary?.rewardChest}
       primaryAction={{ label: 'Siguiente reto', onPress: onNextChallenge }}
       secondaryAction={{ label: 'Jugar de nuevo', onPress: onRestart, variant: 'secondary' }}
       auxiliaryActions={[

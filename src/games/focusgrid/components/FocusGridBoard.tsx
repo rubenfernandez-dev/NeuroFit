@@ -6,6 +6,7 @@ import { TapFeedback } from '../hooks/useTapFeedback';
 type Props = {
   numbers: number[];
   nextExpected: number;
+  hintedValue?: number | null;
   tileSize: number;
   gridGap: number;
   gridMaxWidth: number;
@@ -20,6 +21,7 @@ type Props = {
 export default function FocusGridBoard({
   numbers,
   nextExpected,
+  hintedValue,
   tileSize,
   gridGap,
   gridMaxWidth,
@@ -44,6 +46,7 @@ export default function FocusGridBoard({
     >
       {numbers.map((value) => {
         const alreadySolved = value < nextExpected;
+        const isHintedCell = hintedValue === value && !alreadySolved;
         const isFeedbackCell = tapFeedback?.value === value;
         const isIncorrectFlash = isFeedbackCell && tapFeedback?.type === 'incorrect';
         const isCorrectFlash = isFeedbackCell && tapFeedback?.type === 'correct';
@@ -67,6 +70,11 @@ export default function FocusGridBoard({
           border = theme.colors.success;
         } else if (isIncorrectFlash) {
           border = theme.colors.warning;
+        }
+
+        if (isHintedCell) {
+          bg = theme.colors.primarySoft;
+          border = theme.colors.primary;
         }
 
         return (

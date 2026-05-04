@@ -3,6 +3,11 @@ import { getProfile, updateProfile } from '../storage/profile';
 import { toSafeNeuroCoinAmount } from './neuroCoins';
 
 export type NeuroCoinReason =
+  | 'focus_grid_reveal_next'
+  | 'speed_match_extra_time'
+  | 'memory_reveal_cards'
+  | 'pattern_memory_repeat_sequence'
+  | 'number_match_suggest_move'
   | 'mental_math_extra_time'
   | 'mental_math_skip_question'
   | 'sudoku_recover_mistake'

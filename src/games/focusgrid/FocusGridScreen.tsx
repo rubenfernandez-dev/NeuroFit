@@ -11,6 +11,7 @@ import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import { trackFocusGridResult, trackSessionStart } from '../../shared/storage/stats';
 import { applyFocusGridCorrectTimeBonus, buildShuffledGridNumbers, calcAccuracy, getFocusGridConfig } from './logic';
 import { FocusGridFinishReason, FocusGridGameResult } from './types';
@@ -24,7 +25,11 @@ import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuc
 import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
 import { resetSessionStreak } from '../../shared/session/sessionStreak';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import useGameHelp from '../../shared/economy/useGameHelp';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FocusGrid'>;
 
@@ -44,6 +49,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 export default function FocusGridScreen({ route, navigation }: Props) {
@@ -71,7 +77,41 @@ export default function FocusGridScreen({ route, navigation }: Props) {
   const [resultVisible, setResultVisible] = useState(false);
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [hintedValue, setHintedValue] = useState<number | null>(null);
+  const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { tapFeedback, setTapFeedback, clearFeedback, applyTapFeedback } = useTapFeedback();
+
+  const clearHint = useCallback(() => {
+    if (hintTimeoutRef.current) {
+      clearTimeout(hintTimeoutRef.current);
+      hintTimeoutRef.current = null;
+    }
+    setHintedValue(null);
+  }, []);
+
+  const {
+    message: revealFeedback,
+    usesLeft: revealUsesLeft,
+    canUse: canReveal,
+    resetHelp: resetRevealHelp,
+    executeHelp: handleRevealNext,
+  } = useGameHelp({
+    helpId: 'focus_grid_reveal_next',
+    cost: NEURO_COIN_COSTS.focusGridRevealNext,
+    maxUses: 2,
+    isAvailable: () => !(dailyBlockedReason || phase !== 'playing' || didFinish || finishing),
+    performEffect: ({ newBalance }) => {
+      setNeuroCoins(newBalance);
+      clearHint();
+      setHintedValue(nextExpected);
+      hintTimeoutRef.current = setTimeout(() => {
+        setHintedValue((current) => (current === nextExpected ? null : current));
+        hintTimeoutRef.current = null;
+      }, 1000);
+    },
+  });
 
   const prepareFreshSession = useCallback(
     (nextSeed: number) => {
@@ -90,8 +130,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       setResultVisible(false);
       setResultSummary(null);
       setTapFeedback(null);
+      clearHint();
+      resetRevealHelp();
     },
-    [config.totalSeconds, totalCells],
+    [clearHint, config.totalSeconds, resetRevealHelp, totalCells],
   );
 
   useEffect(() => {
@@ -99,8 +141,9 @@ export default function FocusGridScreen({ route, navigation }: Props) {
     return () => {
       mountedRef.current = false;
       clearFeedback();
+      clearHint();
     };
-  }, [clearFeedback]);
+  }, [clearFeedback, clearHint]);
 
   useEffect(() => {
     let mounted = true;
@@ -128,6 +171,11 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
         await markDailyStageStarted({ stageIndex, gameId: 'focusgrid' });
       }
+
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
 
       const saved = await getFocusGridState();
       if (
@@ -330,7 +378,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         streakBonusLabel: completionResult.streakBonus.granted
           ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
           : undefined,
+        rewardChest: completionResult.rewardChest,
       });
+      setXpTotal((prev) => prev + completionResult.earnedXp);
+      setNeuroCoins((prev) => prev + completionResult.earnedSp);
       setResultVisible(true);
       setFinishing(false);
     },
@@ -403,11 +454,12 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
   const exitGame = useCallback(() => {
     clearFeedback();
+    clearHint();
     if (sessionStarted && !didFinish) {
       resetSessionStreak();
     }
     navigation.navigate(isDaily ? 'DailyChallenge' : 'Games');
-  }, [clearFeedback, didFinish, isDaily, navigation, sessionStarted]);
+  }, [clearFeedback, clearHint, didFinish, isDaily, navigation, sessionStarted]);
 
   const accuracy = calcAccuracy(correctTaps, totalTaps);
   const gridGap = config.gridSize >= 6 ? 4 : 6;
@@ -420,7 +472,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
   return (
     <>
       <Screen>
-        <PlayerEconomyBar compact />
+        <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card variant="primary">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Focus Grid · {difficultyLabel(difficulty)}</Text>
@@ -439,6 +491,20 @@ export default function FocusGridScreen({ route, navigation }: Props) {
             Siguiente: {Math.min(nextExpected, totalCells)} · Fallos: {mistakes} · Precisión: {accuracy}%
           </Text>
         </Card>
+
+        {!dailyBlockedReason ? (
+          <Card style={{ padding: 10 }}>
+            <NeuroCoinActionButton
+              label="Mostrar"
+              icon="👁"
+              cost={NEURO_COIN_COSTS.focusGridRevealNext}
+              usesLeft={revealUsesLeft}
+              disabled={!canReveal}
+              onPress={handleRevealNext}
+            />
+            {revealFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{revealFeedback}</Text> : null}
+          </Card>
+        ) : null}
 
         {dailyBlockedReason ? (
           <Card>
@@ -461,6 +527,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
             <FocusGridBoard
               numbers={numbers}
               nextExpected={nextExpected}
+              hintedValue={hintedValue}
               tileSize={tileSize}
               gridGap={gridGap}
               gridMaxWidth={gridMaxWidth}

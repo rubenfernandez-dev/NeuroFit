@@ -24,6 +24,7 @@ import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
@@ -38,6 +39,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 export default function MentalMathScreen({ route, navigation }: Props) {
@@ -265,6 +267,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       streakBonusLabel: completionResult.streakBonus.granted
         ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
         : undefined,
+      rewardChest: completionResult.rewardChest,
     });
     setXpTotal((prev) => prev + completionResult.earnedXp);
     setNeuroCoins((prev) => prev + completionResult.earnedSp);
@@ -510,6 +513,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
       sessionStreak={resultSummary?.sessionStreak ?? 0}
       streakBonusTitle={resultSummary?.streakBonusTitle}
       streakBonusText={resultSummary?.streakBonusLabel}
+      rewardChest={resultSummary?.rewardChest}
       primaryAction={{
         label: 'Siguiente reto',
         onPress: () => {

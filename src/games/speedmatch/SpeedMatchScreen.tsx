@@ -14,13 +14,19 @@ import { msToClock } from '../../shared/utils/time';
 import { createSeededRng, pickOne } from '../../shared/utils/random';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import { clearSpeedMatchState, getSpeedMatchState, saveSpeedMatchState } from './storage/speedmatchState';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
 
@@ -36,6 +42,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 const SYMBOL_LIBRARY = ['●', '■', '▲', '◆', '★', '✚', '⬢', '◉', '☼'];
@@ -108,7 +115,12 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
   const [inputLocked, setInputLocked] = useState(false);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [extraTimeUses, setExtraTimeUses] = useState(0);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
+  const MAX_EXTRA_TIME_USES = 2;
 
   const clearAdvanceTimer = () => {
     if (advanceTimerRef.current) {
@@ -142,6 +154,11 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
         await markDailyStageStarted({ stageIndex, gameId: 'speedmatch' });
       }
+
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
 
       const saved = await getSpeedMatchState();
       if (
@@ -187,6 +204,8 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       setResultVisible(false);
       setResultSummary(null);
       setInputLocked(false);
+      setExtraTimeUses(0);
+      clearEconomyFeedback();
       await trackSessionStart({ gameId: 'speedmatch', mode: isDaily ? 'daily' : 'normal' });
     };
 
@@ -330,7 +349,10 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       streakBonusLabel: completionResult.streakBonus.granted
         ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
         : undefined,
+      rewardChest: completionResult.rewardChest,
     });
+    setXpTotal((prev) => prev + completionResult.earnedXp);
+    setNeuroCoins((prev) => prev + completionResult.earnedSp);
     setResultVisible(true);
     setFinishing(false);
   };
@@ -398,8 +420,25 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     setResultVisible(false);
     setResultSummary(null);
     setInputLocked(false);
+    setExtraTimeUses(0);
+    clearEconomyFeedback();
     setSessionStarted(true);
     await trackSessionStart({ gameId: 'speedmatch', mode: 'normal' });
+  };
+
+  const handleBuyExtraTime = async () => {
+    if (dailyBlockedReason || didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.speedMatchExtraTime, 'speed_match_extra_time');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setTimeLeft((prev) => prev + 2);
+    setNeuroCoins(spendResult.newBalance);
+    setExtraTimeUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.speedMatchExtraTime);
   };
 
   const accuracyPct = Math.round((correct / Math.max(1, correct + mistakes)) * 100);
@@ -407,7 +446,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   return (
     <>
       <Screen>
-        <PlayerEconomyBar compact />
+        <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card variant="cyan">
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
@@ -426,6 +465,20 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
             Máx. fallos: {config.maxMistakes}
           </Text>
         </Card>
+
+        {!dailyBlockedReason ? (
+          <Card style={{ padding: 10 }}>
+            <NeuroCoinActionButton
+              label="+2s"
+              icon="⏱"
+              cost={NEURO_COIN_COSTS.speedMatchExtraTime}
+              usesLeft={MAX_EXTRA_TIME_USES - extraTimeUses}
+              disabled={didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES}
+              onPress={handleBuyExtraTime}
+            />
+            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
+          </Card>
+        ) : null}
 
         {dailyBlockedReason ? (
           <Card>
@@ -473,6 +526,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
         sessionStreak={resultSummary?.sessionStreak ?? 0}
         streakBonusTitle={resultSummary?.streakBonusTitle}
         streakBonusText={resultSummary?.streakBonusLabel}
+        rewardChest={resultSummary?.rewardChest}
         primaryAction={{
             label: 'Siguiente reto',
           onPress: () => {

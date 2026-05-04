@@ -21,6 +21,10 @@ vi.mock('./seasonPoints', () => ({
   grantSeasonPoints: vi.fn(async () => ({ earnedSeasonPoints: 9 })),
 }));
 
+vi.mock('./rewardChest', () => ({
+  progressRewardChest: vi.fn(async () => null),
+}));
+
 import { completeGameSession } from './sessionCompletion';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 import { claimDailyReward, completeDailyStage } from '../storage/daily';

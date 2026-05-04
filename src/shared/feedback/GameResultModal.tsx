@@ -3,6 +3,8 @@ import { Animated, Easing, Modal, Text, View } from 'react-native';
 import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { useAppTheme } from '../theme/theme';
+import RewardModal from './RewardModal';
+import { RewardChestGrant } from '../gamification/rewardChest';
 
 type ResultVariant = 'victory' | 'defeat' | 'neutral';
 
@@ -30,6 +32,7 @@ type GameResultModalProps = {
   sessionStreak?: number;
   streakBonusTitle?: string;
   streakBonusText?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 export default function GameResultModal({
@@ -45,6 +48,7 @@ export default function GameResultModal({
   sessionStreak,
   streakBonusTitle,
   streakBonusText,
+  rewardChest,
 }: GameResultModalProps) {
   const { theme } = useAppTheme();
   const entrance = useRef(new Animated.Value(0)).current;
@@ -216,6 +220,8 @@ export default function GameResultModal({
                   {streakBonusText ? <Text style={{ color: theme.colors.text, fontWeight: '700', marginTop: streakBonusTitle ? 4 : 0 }}>{streakBonusText}</Text> : null}
                 </View>
               ) : null}
+
+              <RewardModal visible={visible} rewardChest={rewardChest} />
             </View>
 
             <View style={{ marginTop: 16 }}>

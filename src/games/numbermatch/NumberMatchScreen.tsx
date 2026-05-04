@@ -12,6 +12,7 @@ import { msToClock, nowISO } from '../../shared/utils/time';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { trackNumberMatchResult, trackSessionStart } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 import {
@@ -31,8 +32,13 @@ import { NumberMatchFinishReason, NumberMatchGameResult } from './types';
 import { computePerformanceFromScore } from '../../core/gamification/economy';
 import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
 import { resetSessionStreak } from '../../shared/session/sessionStreak';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberMatch'>;
 
@@ -43,6 +49,30 @@ type FeedbackPair = {
   a: number;
   b: number;
 };
+
+type SuggestedPair = {
+  a: number;
+  b: number;
+};
+
+function findSuggestedMove(board: Array<number | null>, cols: number): SuggestedPair | null {
+  const nonEmpty = board
+    .map((value, index) => ({ value, index }))
+    .filter((entry): entry is { value: number; index: number } => entry.value !== null);
+
+  for (let i = 0; i < nonEmpty.length; i += 1) {
+    for (let j = i + 1; j < nonEmpty.length; j += 1) {
+      const a = nonEmpty[i];
+      const b = nonEmpty[j];
+      if (!canValuesMatch(a.value, b.value)) continue;
+      if (isValidMatchConnection(board, a.index, b.index, cols)) {
+        return { a: a.index, b: b.index };
+      }
+    }
+  }
+
+  return null;
+}
 
 type ResultSummary = {
   elapsedMs: number;
@@ -61,6 +91,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
@@ -83,6 +114,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [feedbackPair, setFeedbackPair] = useState<FeedbackPair | null>(null);
   const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [suggestedPair, setSuggestedPair] = useState<SuggestedPair | null>(null);
+  const suggestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [score, setScore] = useState(0);
   const [validMatches, setValidMatches] = useState(0);
@@ -100,6 +133,11 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
   const [resultVisible, setResultVisible] = useState(false);
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [suggestUses, setSuggestUses] = useState(0);
+  const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
+  const MAX_SUGGEST_USES = 2;
 
   const clearFeedback = useCallback(() => {
     if (feedbackTimerRef.current) {
@@ -107,6 +145,14 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       feedbackTimerRef.current = null;
     }
     setFeedbackPair(null);
+  }, []);
+
+  const clearSuggestion = useCallback(() => {
+    if (suggestionTimerRef.current) {
+      clearTimeout(suggestionTimerRef.current);
+      suggestionTimerRef.current = null;
+    }
+    setSuggestedPair(null);
   }, []);
 
   const applyPairFeedback = useCallback((next: FeedbackPair) => {
@@ -139,6 +185,9 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     setFinishing(false);
     setResultVisible(false);
     setResultSummary(null);
+    setSuggestUses(0);
+    clearSuggestion();
+    clearEconomyFeedback();
   }, [clearFeedback, config.cols, config.initialFilled, config.rows, config.totalSeconds]);
 
   useEffect(() => {
@@ -146,8 +195,9 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     return () => {
       mountedRef.current = false;
       clearFeedback();
+      clearSuggestion();
     };
-  }, [clearFeedback]);
+  }, [clearFeedback, clearSuggestion]);
 
   useEffect(() => {
     let mounted = true;
@@ -175,6 +225,11 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
         await markDailyStageStarted({ stageIndex, gameId: 'numbermatch' });
       }
+
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
 
       const saved = await getNumberMatchState();
       if (
@@ -382,7 +437,10 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
       streakBonusLabel: completionResult.streakBonus.granted
         ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
         : undefined,
+      rewardChest: completionResult.rewardChest,
     });
+    setXpTotal((prev) => prev + completionResult.earnedXp);
+    setNeuroCoins((prev) => prev + completionResult.earnedSp);
     setResultVisible(true);
     setFinishing(false);
   }, [bestCombo, board, clearFeedback, didFinish, difficulty, elapsedSec, finishing, invalidMatches, isDaily, linesUsed, navigation, score, stageIndex, startedAtISO, validMatches]);
@@ -412,12 +470,14 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     const compacted = compactBoard(board, config.cols);
     if (compacted.some((v, i) => v !== board[i])) {
       clearFeedback();
+      clearSuggestion();
       setBoard(compacted);
     }
-  }, [board, clearFeedback, config.cols]);
+  }, [board, clearFeedback, clearSuggestion, config.cols]);
 
   const handleCellPress = useCallback((index: number) => {
     if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    clearSuggestion();
 
     const value = board[index];
     if (value === null) return;
@@ -469,7 +529,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     setInvalidMatches((prev) => prev + 1);
     setCombo(0);
     setSelectedIndex(index);
-  }, [applyPairFeedback, board, combo, config.cols, dailyBlockedReason, didFinish, finishing, lastValidAtMs, phase, selectedIndex]);
+  }, [applyPairFeedback, board, clearSuggestion, combo, config.cols, dailyBlockedReason, didFinish, finishing, lastValidAtMs, phase, selectedIndex]);
 
   const startGame = useCallback(() => {
     if (dailyBlockedReason || didFinish || board.length === 0) return;
@@ -478,6 +538,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
 
   const addLine = useCallback(() => {
     if (dailyBlockedReason || didFinish || finishing || phase !== 'playing') return;
+    clearSuggestion();
     const result = addLineFromRemaining(board, config.addLineCount, config.cols);
     if (result.added <= 0) {
       const hasMove = hasAnyValidMove(board, config.cols);
@@ -493,30 +554,60 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     if (!hasAnyValidMove(result.nextBoard, config.cols) && result.nextBoard.every((cell) => cell !== null)) {
       finishSession('board_full');
     }
-  }, [board, config.addLineCount, config.cols, dailyBlockedReason, didFinish, finishSession, finishing, phase]);
+  }, [board, clearSuggestion, config.addLineCount, config.cols, dailyBlockedReason, didFinish, finishSession, finishing, phase]);
 
   const restart = useCallback(async () => {
     if (isDaily) return;
     clearFeedback();
+    clearSuggestion();
+    clearEconomyFeedback();
     const nextSeed = getSessionSeed(false);
     prepareFreshSession(nextSeed);
     await trackSessionStart({ gameId: 'numbermatch', mode: 'normal' });
-  }, [clearFeedback, isDaily, prepareFreshSession]);
+  }, [clearEconomyFeedback, clearFeedback, clearSuggestion, isDaily, prepareFreshSession]);
 
   const exitGame = useCallback(() => {
     clearFeedback();
+    clearSuggestion();
     if (sessionStarted && !didFinish) {
       resetSessionStreak();
     }
     navigation.navigate(isDaily ? 'DailyChallenge' : 'Games');
-  }, [clearFeedback, didFinish, isDaily, navigation, sessionStarted]);
+  }, [clearFeedback, clearSuggestion, didFinish, isDaily, navigation, sessionStarted]);
+
+  const handleSuggestMove = useCallback(async () => {
+    if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    if (suggestUses >= MAX_SUGGEST_USES) return;
+
+    const suggestion = findSuggestedMove(board, config.cols);
+    if (!suggestion) {
+      showNeuroCoinError('No hay movimiento disponible');
+      return;
+    }
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.numberMatchSuggestMove, 'number_match_suggest_move');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setNeuroCoins(spendResult.newBalance);
+    setSuggestUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.numberMatchSuggestMove);
+    clearSuggestion();
+    setSuggestedPair(suggestion);
+    suggestionTimerRef.current = setTimeout(() => {
+      setSuggestedPair(null);
+      suggestionTimerRef.current = null;
+    }, 1000);
+  }, [board, config.cols, dailyBlockedReason, didFinish, finishing, phase, showNeuroCoinError, showNeuroCoinSpendFeedback, suggestUses, clearSuggestion]);
 
   const boardClearedPercent = computeBoardClearedPercent(board);
 
   return (
     <>
       <Screen>
-        <PlayerEconomyBar compact />
+        <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card variant="primary">
           <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Number Match · {difficultyLabel(difficulty)}</Text>
           <View style={{ marginTop: 8 }}>
@@ -556,6 +647,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
                     const value = board[index];
                     const isSelected = selectedIndex === index;
                     const feedback = feedbackPair && (feedbackPair.a === index || feedbackPair.b === index) ? feedbackPair.kind : null;
+                    const isSuggested = suggestedPair !== null && (suggestedPair.a === index || suggestedPair.b === index);
 
                     return (
                       <Pressable
@@ -574,10 +666,17 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
                               ? theme.colors.green
                               : feedback === 'invalid'
                                 ? theme.colors.red
+                                : isSuggested
+                                  ? theme.colors.primary
                                 : isSelected
                                   ? theme.colors.primary
                                   : theme.colors.border,
-                          backgroundColor: value === null ? theme.colors.bg1 : theme.colors.surface,
+                          backgroundColor:
+                            value === null
+                              ? theme.colors.bg1
+                              : isSuggested
+                                ? theme.colors.primarySoft
+                                : theme.colors.surface,
                           opacity: value === null ? 0.4 : 1,
                         }}
                       >
@@ -602,6 +701,20 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
           />
           <Button title="Anadir linea" variant="secondary" onPress={addLine} disabled={!!dailyBlockedReason || phase !== 'playing' || didFinish} style={{ flex: 1 }} />
         </View>
+
+        {!dailyBlockedReason ? (
+          <Card style={{ padding: 10 }}>
+            <NeuroCoinActionButton
+              label="Sugerir"
+              icon="💡"
+              cost={NEURO_COIN_COSTS.numberMatchSuggestMove}
+              usesLeft={MAX_SUGGEST_USES - suggestUses}
+              disabled={phase !== 'playing' || didFinish || finishing || suggestUses >= MAX_SUGGEST_USES}
+              onPress={handleSuggestMove}
+            />
+            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
+          </Card>
+        ) : null}
 
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button title="Reintentar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} style={{ flex: 1 }} />
@@ -628,6 +741,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
         sessionStreak={resultSummary?.sessionStreak ?? 0}
         streakBonusTitle={resultSummary?.streakBonusTitle}
         streakBonusText={resultSummary?.streakBonusLabel}
+        rewardChest={resultSummary?.rewardChest}
         primaryAction={{
           label: 'Siguiente reto',
           onPress: () => {

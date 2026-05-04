@@ -29,6 +29,7 @@ import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -57,6 +58,7 @@ type VictorySummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 export default function SudokuScreen({ route, navigation }: Props) {
@@ -395,6 +397,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
       streakBonusLabel: completionResult.streakBonus.granted
         ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
         : undefined,
+      rewardChest: completionResult.rewardChest,
     });
     setXpTotal((prev) => prev + completionResult.earnedXp);
     setNeuroCoins((prev) => prev + completionResult.earnedSp);
@@ -727,6 +730,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
         sessionStreak={victorySummary?.sessionStreak ?? 0}
         streakBonusTitle={victorySummary?.streakBonusTitle}
         streakBonusText={victorySummary?.streakBonusLabel}
+        rewardChest={victorySummary?.rewardChest}
         primaryAction={{
           label: 'Siguiente reto',
           onPress: () => {

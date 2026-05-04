@@ -13,14 +13,20 @@ import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
+import { getProfile } from '../../shared/storage/profile';
 import Screen from '../../shared/ui/Screen';
 import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
 import { navigateToNextChallenge } from '../../shared/session/challengeNavigation';
+import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
+import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
+import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
+import { RewardChestGrant } from '../../shared/gamification/rewardChest';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
@@ -36,6 +42,7 @@ type ResultSummary = {
   sessionStreak: number;
   streakBonusTitle?: string;
   streakBonusLabel?: string;
+  rewardChest?: RewardChestGrant;
 };
 
 export default function MemoryScreen({ route, navigation }: Props) {
@@ -61,8 +68,15 @@ export default function MemoryScreen({ route, navigation }: Props) {
   const [resultSummary, setResultSummary] = useState<ResultSummary | null>(null);
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
   const [previewActive, setPreviewActive] = useState(false);
+  const [revealAllActive, setRevealAllActive] = useState(false);
+  const [xpTotal, setXpTotal] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
+  const [revealUses, setRevealUses] = useState(0);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mismatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
+  const MAX_REVEAL_USES = 1;
 
   const memoryConfig = useMemo(() => getMemoryDifficultyConfig(difficulty), [difficulty]);
   const { cols } = memoryConfig;
@@ -78,6 +92,13 @@ export default function MemoryScreen({ route, navigation }: Props) {
     if (mismatchTimerRef.current) {
       clearTimeout(mismatchTimerRef.current);
       mismatchTimerRef.current = null;
+    }
+  };
+
+  const clearRevealTimer = () => {
+    if (revealTimerRef.current) {
+      clearTimeout(revealTimerRef.current);
+      revealTimerRef.current = null;
     }
   };
 
@@ -117,6 +138,11 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
         await markDailyStageStarted({ stageIndex, gameId: 'memory' });
       }
+
+      const profile = await getProfile();
+      if (!mounted) return;
+      setXpTotal(profile.xpTotal);
+      setNeuroCoins(profile.seasonPoints);
 
       const saved = await getMemoryState();
       if (
@@ -161,6 +187,9 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setResultVisible(false);
       setResultSummary(null);
       setSessionStarted(true);
+      setRevealAllActive(false);
+      setRevealUses(0);
+      clearEconomyFeedback();
       startPreviewWindow();
       await trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
     };
@@ -170,8 +199,9 @@ export default function MemoryScreen({ route, navigation }: Props) {
       mounted = false;
       clearPreviewTimer();
       clearMismatchTimer();
+      clearRevealTimer();
     };
-  }, [difficulty, isDaily, dailyDateISO, dailySeed, stageIndex, memoryConfig.previewTimeMs]);
+  }, [clearEconomyFeedback, difficulty, isDaily, dailyDateISO, dailySeed, stageIndex, memoryConfig.previewTimeMs]);
 
   useEffect(() => {
     if (!sessionStarted || cards.length === 0 || didFinish || dailyBlockedReason) return;
@@ -269,7 +299,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
         streakBonusLabel: completionResult.streakBonus.granted
           ? `+${completionResult.streakBonus.xp} XP · ${formatNeuroCoinRewardCompact(completionResult.streakBonus.sp)}`
           : undefined,
+        rewardChest: completionResult.rewardChest,
       });
+      setXpTotal((prev) => prev + completionResult.earnedXp);
+      setNeuroCoins((prev) => prev + completionResult.earnedSp);
       setResultVisible(true);
       setFinishing(false);
     };
@@ -327,6 +360,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
   const restart = () => {
     if (isDaily) return;
+    clearRevealTimer();
     setCards(buildDeck(difficulty, isDaily ? dailySeed : undefined));
     setFlipped([]);
     setMatched([]);
@@ -341,14 +375,40 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setResultSummary(null);
     setSessionStarted(true);
     setLockInput(false);
+    setRevealAllActive(false);
+    setRevealUses(0);
+    clearEconomyFeedback();
     startPreviewWindow();
     trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
+  };
+
+  const handleRevealCards = async () => {
+    if (dailyBlockedReason || didFinish || revealUses >= MAX_REVEAL_USES) return;
+    if (previewActive || lockInput || flipped.length >= 2) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.memoryRevealCards, 'memory_reveal_cards');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    clearRevealTimer();
+    setNeuroCoins(spendResult.newBalance);
+    setRevealUses((prev) => prev + 1);
+    setRevealAllActive(true);
+    setLockInput(true);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.memoryRevealCards);
+    revealTimerRef.current = setTimeout(() => {
+      setRevealAllActive(false);
+      setLockInput(false);
+      revealTimerRef.current = null;
+    }, 1500);
   };
 
   return (
     <>
     <Screen>
-      <PlayerEconomyBar compact />
+      <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
       <Card variant="cyan">
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Memory · {difficultyLabel(difficulty)}</Text>
         <View style={{ marginTop: 8 }}>
@@ -361,6 +421,20 @@ export default function MemoryScreen({ route, navigation }: Props) {
           Puntos: {roundScore} · Racha: x{Math.max(1, currentStreak)} · Fallos: {mismatches}
         </Text>
       </Card>
+
+      {!dailyBlockedReason ? (
+        <Card style={{ padding: 10 }}>
+          <NeuroCoinActionButton
+            label="Revelar"
+            icon="🃏"
+            cost={NEURO_COIN_COSTS.memoryRevealCards}
+            usesLeft={MAX_REVEAL_USES - revealUses}
+            disabled={didFinish || previewActive || lockInput || revealUses >= MAX_REVEAL_USES}
+            onPress={handleRevealCards}
+          />
+          {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
+        </Card>
+      ) : null}
 
       {dailyBlockedReason ? (
         <Card>
@@ -377,7 +451,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
           <MemoryCard
             key={card.id}
             emoji={card.emoji}
-            isFaceUp={previewActive || flipped.includes(index)}
+            isFaceUp={previewActive || revealAllActive || flipped.includes(index)}
             isMatched={matched.includes(index)}
             onPress={() => onCardPress(index)}
           />
@@ -406,6 +480,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
       sessionStreak={resultSummary?.sessionStreak ?? 0}
       streakBonusTitle={resultSummary?.streakBonusTitle}
       streakBonusText={resultSummary?.streakBonusLabel}
+      rewardChest={resultSummary?.rewardChest}
       primaryAction={{
         label: 'Siguiente reto',
         onPress: () => {

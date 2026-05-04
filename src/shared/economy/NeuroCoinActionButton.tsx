@@ -22,12 +22,12 @@ export default function NeuroCoinActionButton({ label, cost, icon, disabled = fa
       style={({ pressed }) => ({
         borderRadius: 14,
         borderWidth: 1,
-        borderColor: disabled ? theme.colors.border : '#22D3EE',
+        borderColor: disabled ? theme.colors.border : theme.colors.primary,
         backgroundColor: disabled
           ? theme.colors.bg1
           : theme.mode === 'dark'
-            ? 'rgba(34,211,238,0.14)'
-            : 'rgba(34,211,238,0.16)',
+            ? 'rgba(59,130,246,0.20)'
+            : 'rgba(59,130,246,0.14)',
         opacity: disabled ? 0.55 : pressed ? 0.88 : 1,
         transform: [{ scale: pressed ? 0.98 : 1 }],
         paddingHorizontal: 10,
