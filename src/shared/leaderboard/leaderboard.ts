@@ -175,9 +175,11 @@ function varianceByPercentile(percentileFromTop: number): number {
   return 22;
 }
 
-function generateBotEntries(params: { seasonId: string; leagueId: LeagueId; size: number }): Array<Omit<LeaderboardEntry, 'rank' | 'isUser'>> {
-  const { seasonId, leagueId, size } = params;
+function generateBotEntries(params: { seasonId: string; leagueId: LeagueId; size: number; scoreScale: number }): Array<Omit<LeaderboardEntry, 'rank' | 'isUser'>> {
+  const { seasonId, leagueId, size, scoreScale } = params;
   const profile = LEAGUE_BANDS[leagueId];
+  const scaledBottomMin = Math.round(profile.bottomMin * scoreScale);
+  const scaledHardCap = Math.round(profile.hardCap * scoreScale);
   const seed = hashString(`${seasonId}:${leagueId}:bots-v2`);
   const rng = createSeededRng(seed);
 
@@ -185,11 +187,11 @@ function generateBotEntries(params: { seasonId: string; leagueId: LeagueId; size
     const percentile = size > 1 ? index / (size - 1) : 0;
     const base = curveScoreByPercentile(percentile, profile);
     const noise = randomInt(-varianceByPercentile(percentile), varianceByPercentile(percentile), rng);
-    const raw = Math.round(base + noise);
+    const raw = Math.round((base + noise) * scoreScale);
 
     return {
       name: makeBotName(index + 1, rng),
-      seasonPoints: clamp(raw, profile.bottomMin, profile.hardCap),
+      seasonPoints: clamp(raw, scaledBottomMin, scaledHardCap),
     };
   });
 
@@ -200,7 +202,7 @@ function generateBotEntries(params: { seasonId: string; leagueId: LeagueId; size
 
   for (let i = 1; i < sorted.length; i += 1) {
     if (sorted[i].seasonPoints > sorted[i - 1].seasonPoints) {
-      sorted[i].seasonPoints = Math.max(profile.bottomMin, sorted[i - 1].seasonPoints - 1);
+      sorted[i].seasonPoints = Math.max(scaledBottomMin, sorted[i - 1].seasonPoints - 1);
     }
   }
 
@@ -213,15 +215,18 @@ export async function generateWeeklyLeaderboard(params: {
   userSeasonPoints: number;
   userName?: string;
   size?: number;
+  scoreScale?: number;
 }): Promise<LeaderboardEntry[]> {
-  const { seasonId, leagueId, userSeasonPoints, userName = 'Tú', size } = params;
+  const { seasonId, leagueId, userSeasonPoints, userName = 'Tú', size, scoreScale = 1 } = params;
   const requestedSize = typeof size === 'number' ? Math.floor(size) : 50;
   const safeSize = clamp(requestedSize, 2, 200);
   const botsSize = Math.max(1, safeSize - 1);
   const profile = LEAGUE_BANDS[leagueId];
+  const safeScale = Math.max(1, Math.floor(scoreScale));
   const userPoints = Math.max(0, Math.floor(userSeasonPoints));
+  const scaledHardCap = Math.round(profile.hardCap * safeScale);
 
-  const bots = generateBotEntries({ seasonId, leagueId, size: botsSize }).map((entry) => ({
+  const bots = generateBotEntries({ seasonId, leagueId, size: botsSize, scoreScale: safeScale }).map((entry) => ({
     rank: 0,
     isUser: false,
     ...entry,
@@ -232,7 +237,7 @@ export async function generateWeeklyLeaderboard(params: {
     {
       rank: 0,
       name: userName,
-      seasonPoints: clamp(userPoints, 0, profile.hardCap),
+      seasonPoints: clamp(userPoints, 0, scaledHardCap),
       isUser: true,
     },
   ]

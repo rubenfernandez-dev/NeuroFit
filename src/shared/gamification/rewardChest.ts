@@ -4,6 +4,7 @@ import { addNeuroCoins } from '../economy/neuroCoinService';
 import { getItem, setItem } from '../storage/secureStore';
 import { STORAGE_KEYS } from '../storage/keys';
 import { grantFlatXp } from './xp';
+import { trackRewardChestOpened } from '../../services/analytics';
 
 const GAMES_PER_CHEST = 5;
 
@@ -93,6 +94,12 @@ export async function progressRewardChest(gameId: GameId): Promise<RewardChestGr
       };
 
       logEvent('reward_chest_granted', {
+        gameId,
+        rewardType: grant.rewardType,
+        amount: grant.amount,
+        cycleGames: grant.cycleGames,
+      });
+      void trackRewardChestOpened({
         gameId,
         rewardType: grant.rewardType,
         amount: grant.amount,

@@ -9,15 +9,26 @@ type PlayerEconomyBarProps = {
   xp?: number;
   neuroCoins?: number;
   compact?: boolean;
+  middleLabel?: string;
+  middleSubLabel?: string;
+  middleColor?: string;
 };
 
-export default function PlayerEconomyBar({ xp, neuroCoins, compact = true }: PlayerEconomyBarProps) {
+export default function PlayerEconomyBar({
+  xp,
+  neuroCoins,
+  compact = true,
+  middleLabel,
+  middleSubLabel,
+  middleColor,
+}: PlayerEconomyBarProps) {
   const { theme } = useAppTheme();
   const [state, setState] = React.useState({ xp: 0, neuroCoins: 0 });
 
   const hasExternalValues = typeof xp === 'number' || typeof neuroCoins === 'number';
   const xpValue = typeof xp === 'number' ? Math.max(0, Math.floor(xp)) : state.xp;
   const neuroCoinValue = typeof neuroCoins === 'number' ? Math.max(0, Math.floor(neuroCoins)) : state.neuroCoins;
+  const hasMiddle = Boolean(middleLabel && middleLabel.trim().length > 0);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -71,6 +82,37 @@ export default function PlayerEconomyBar({ xp, neuroCoins, compact = true }: Pla
         >
           <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: compact ? 12 : 13 }}>⭐ {xpValue.toLocaleString()} XP</Text>
         </View>
+
+        {hasMiddle ? (
+          <View
+            style={{
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: middleColor
+                ? `${middleColor}99`
+                : theme.mode === 'dark'
+                  ? 'rgba(167,139,250,0.45)'
+                  : 'rgba(109,40,217,0.35)',
+              backgroundColor: middleColor
+                ? `${middleColor}22`
+                : theme.mode === 'dark'
+                  ? 'rgba(139,92,246,0.16)'
+                  : 'rgba(167,139,250,0.16)',
+              paddingHorizontal: compact ? 8 : 10,
+              paddingVertical: middleSubLabel ? 3 : 4,
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: compact ? 12 : 13 }} numberOfLines={1}>
+              {middleLabel}
+            </Text>
+            {middleSubLabel ? (
+              <Text style={{ color: theme.colors.textMuted, fontWeight: '700', fontSize: compact ? 10 : 11 }} numberOfLines={1}>
+                {middleSubLabel}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
 
         <View
           style={{

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Image, Modal, Pressable, Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../app/routes';
@@ -7,7 +7,6 @@ import { useAppTheme } from '../shared/theme/theme';
 import Button from '../shared/ui/Button';
 import Card from '../shared/ui/Card';
 import { ensureSeasonCurrent, markLastWeekResultShown, Profile } from '../shared/storage/profile';
-import { getLevelByXp, getNextLevel } from '../shared/gamification/levels';
 import Pill from '../shared/ui/Pill';
 import { getLeagueById } from '../shared/gamification/leagues';
 import Screen from '../shared/ui/Screen';
@@ -20,10 +19,13 @@ import { getCategoryColors } from '../shared/theme/categoryColors';
 import StreakWidget from '../shared/ui/StreakWidget';
 import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
-import { formatNeuroCoinReward, formatNeuroCoins } from '../shared/economy/neuroCoins';
+import { formatNeuroCoins } from '../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
+import GameResultModal from '../shared/feedback/GameResultModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+
+type WeeklyLeagueOutcome = 'promotion' | 'demotion' | 'stay';
 
 export default function HomeScreen({ navigation }: Props) {
   const { theme } = useAppTheme();
@@ -96,12 +98,7 @@ export default function HomeScreen({ navigation }: Props) {
     }, [reloadNonce]),
   );
 
-  const level = getLevelByXp(xpTotal);
-  const nextLevel = getNextLevel(xpTotal);
   const league = getLeagueById(leagueId);
-  const progress = nextLevel
-    ? (xpTotal - level.minXp) / Math.max(1, nextLevel.minXp - level.minXp)
-    : 1;
   const leagueAccent =
     leagueId === 'bronze'
       ? '#CD7F32'
@@ -126,12 +123,21 @@ export default function HomeScreen({ navigation }: Props) {
     setWeeklyResult(null);
   };
 
+  const weeklyLeagueOutcome = useMemo<WeeklyLeagueOutcome>(() => {
+    if (!weeklyResult) return 'stay';
+    const previousLeagueRank = getLeagueById(weeklyResult.leagueBefore).minSeasonPoints;
+    const currentLeagueRank = getLeagueById(weeklyResult.leagueAfter).minSeasonPoints;
+    if (currentLeagueRank > previousLeagueRank) return 'promotion';
+    if (currentLeagueRank < previousLeagueRank) return 'demotion';
+    return 'stay';
+  }, [weeklyResult]);
+
   const weeklyStatusText =
-    weeklyResult && weeklyResult.leagueAfter !== weeklyResult.leagueBefore
-      ? weeklyResult.leagueAfter === leagueId
-        ? '¡Cambio de liga aplicado!'
-        : 'Resultado semanal actualizado'
-      : 'Te mantienes en tu liga';
+    weeklyLeagueOutcome === 'promotion'
+      ? '¡Ascenso de liga esta semana!'
+      : weeklyLeagueOutcome === 'demotion'
+        ? 'Puedes recuperar tu liga completando retos diarios'
+        : 'Te mantienes en tu liga esta semana';
 
   const metrics = useMemo(
     () => [
@@ -158,7 +164,12 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
         </View>
 
-        <PlayerEconomyBar xp={xpTotal} neuroCoins={seasonPoints} />
+        <PlayerEconomyBar
+          xp={xpTotal}
+          neuroCoins={seasonPoints}
+          middleLabel={`${league.badgeEmoji} Liga ${league.name}`}
+          middleColor={leagueAccent}
+        />
 
         {loadError ? (
           <Card variant="warning">
@@ -259,70 +270,71 @@ export default function HomeScreen({ navigation }: Props) {
 
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Pressable onPress={() => navigation.navigate('Leaderboard')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
-            <Card style={{ paddingVertical: 14 }}>
-              <Text style={{ fontSize: 20 }}>🥇</Text>
-              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Ranking local</Text>
+            <Card
+              style={{
+                minHeight: 118,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1.5,
+                borderColor: 'rgba(34,211,238,0.55)',
+                backgroundColor: theme.mode === 'dark' ? 'rgba(8,47,73,0.34)' : 'rgba(224,242,254,0.78)',
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>🥇</Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Ranking</Text>
             </Card>
           </Pressable>
           <Pressable onPress={() => navigation.navigate('Progress')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
-            <Card style={{ paddingVertical: 14 }}>
-              <Text style={{ fontSize: 20 }}>📈</Text>
-              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Progreso</Text>
+            <Card
+              style={{
+                minHeight: 118,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1.5,
+                borderColor: 'rgba(129,140,248,0.55)',
+                backgroundColor: theme.mode === 'dark' ? 'rgba(49,46,129,0.32)' : 'rgba(224,231,255,0.78)',
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>📈</Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Progreso</Text>
             </Card>
           </Pressable>
           <Pressable onPress={() => navigation.navigate('Settings')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
-            <Card style={{ paddingVertical: 14 }}>
-              <Text style={{ fontSize: 20 }}>⚙️</Text>
-              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 6 }]}>Ajustes</Text>
+            <Card
+              style={{
+                minHeight: 118,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1.5,
+                borderColor: 'rgba(52,211,153,0.55)',
+                backgroundColor: theme.mode === 'dark' ? 'rgba(6,78,59,0.30)' : 'rgba(209,250,229,0.75)',
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>⚙️</Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Ajustes</Text>
             </Card>
           </Pressable>
         </View>
 
-        <Card>
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Nivel actual</Text>
-          <Text style={[theme.typography.body, { color: theme.colors.muted, marginTop: 6 }]}>
-            {level.badgeEmoji} {level.name} · {xpTotal} XP
-          </Text>
-          <View style={{ marginTop: 10 }}>
-            <ProgressBar value={progress} />
-          </View>
-          <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 6 }]}>
-            {nextLevel ? `Siguiente: ${nextLevel.name} (${nextLevel.minXp} XP)` : 'Nivel máximo alcanzado'}
-          </Text>
-        </Card>
       </Screen>
 
-      <Modal visible={!!weeklyResult} transparent animationType="fade" onRequestClose={closeWeeklyResult}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: theme.spacing.lg }}>
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              bottom: 0,
-              left: 0,
-              backgroundColor: theme.colors.bg0,
-              opacity: 0.78,
-            }}
-          />
-          <Card>
-            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Resultado semanal</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>{weeklyStatusText}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>
-              Liga: {weeklyResult ? getLeagueById(weeklyResult.leagueBefore).name : '-'} → {weeklyResult ? getLeagueById(weeklyResult.leagueAfter).name : '-'}
-            </Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-              Puesto final: {weeklyResult?.finalRank ?? '-'} / 50
-            </Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-              NeuroCoins de la semana: {formatNeuroCoins(weeklyResult?.spFinal ?? 0)}
-            </Text>
-            <View style={{ marginTop: 12 }}>
-              <Button title="Continuar" onPress={closeWeeklyResult} />
-            </View>
-          </Card>
-        </View>
-      </Modal>
+      <GameResultModal
+        visible={!!weeklyResult}
+        onRequestClose={closeWeeklyResult}
+        variant={weeklyLeagueOutcome === 'promotion' ? 'victory' : 'neutral'}
+        title="Resultado semanal"
+        subtitle={weeklyStatusText}
+        metrics={[
+          {
+            label: 'Liga',
+            value: `${weeklyResult ? getLeagueById(weeklyResult.leagueBefore).name : '-'} → ${weeklyResult ? getLeagueById(weeklyResult.leagueAfter).name : '-'}`,
+          },
+          { label: 'Puesto final', value: `${weeklyResult?.finalRank ?? '-'} / 50` },
+          { label: 'NeuroCoins de la semana', value: formatNeuroCoins(weeklyResult?.spFinal ?? 0) },
+        ]}
+        primaryAction={{ label: 'Continuar', onPress: closeWeeklyResult }}
+        leaguePromotion={weeklyLeagueOutcome === 'promotion'}
+      />
     </>
   );
 }

@@ -17,7 +17,6 @@ import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/da
 import { getProfile } from '../../shared/storage/profile';
 import { SudokuCellPosition, SudokuHistoryEntry } from './model/types';
 import Screen from '../../shared/ui/Screen';
-import Pill from '../../shared/ui/Pill';
 import { updateNeuroAfterGame } from '../../core/gamification/neuroscore';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
@@ -602,10 +601,23 @@ export default function SudokuScreen({ route, navigation }: Props) {
     <>
       <Screen scroll={false} contentStyle={{ flex: 1, gap: compactLayout ? 8 : theme.spacing.md }}>
         <View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
-          <Card variant="cyan" style={{ padding: compactLayout ? 12 : 16 }}>
+          <Card
+            variant="cyan"
+            style={{
+              padding: compactLayout ? 12 : 16,
+              borderWidth: 1.6,
+              borderColor: 'rgba(167,139,250,0.58)',
+              backgroundColor: theme.colors.bg1,
+              shadowColor: '#A78BFA',
+              shadowOpacity: 0.16,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 3,
+            }}
+          >
             <Text style={[theme.typography.h3, { color: theme.colors.text }]} numberOfLines={1}>Sudoku · {difficultyLabel(difficulty)}</Text>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 8 }}>
-              <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+              {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : <View />}
               <Text style={{ color: mistakes >= 4 ? theme.colors.danger : theme.colors.textMuted, fontSize: compactLayout ? 12 : 14 }} numberOfLines={1}>Fallos: {mistakes}/{MAX_MISTAKES}</Text>
             </View>
             <Text style={{ color: theme.colors.textMuted, marginTop: 4, fontSize: compactLayout ? 12 : 14 }} numberOfLines={1}>
@@ -688,7 +700,9 @@ export default function SudokuScreen({ route, navigation }: Props) {
             />
           </View>
 
-          <View style={{ marginTop: controlsGap }}>
+          </Card>
+
+          <View style={{ marginTop: controlsGap, gap: 6 }}>
             <NeuroCoinActionButton
               label="Recuperar fallo"
               icon="🩹"
@@ -698,12 +712,12 @@ export default function SudokuScreen({ route, navigation }: Props) {
                 gameOver || didWin || mistakes <= 0 || recoverMistakeUses >= MAX_RECOVER_MISTAKE_USES || !!dailyBlockedReason
               }
               onPress={handleRecoverMistake}
+              tone="green"
             />
             {economyFeedback ? (
-              <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text>
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text>
             ) : null}
           </View>
-          </Card>
         </View>
         ) : null}
 

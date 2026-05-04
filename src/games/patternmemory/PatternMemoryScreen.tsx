@@ -6,7 +6,6 @@ import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
-import Pill from '../../shared/ui/Pill';
 import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
@@ -105,9 +104,9 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
-  const [repeatUses, setRepeatUses] = useState(0);
+  const [hintUses, setHintUses] = useState(0);
   const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
-  const MAX_REPEAT_USES = 2;
+  const MAX_HINT_USES = 2;
 
   const tileBaseColors = useMemo(
     () => [theme.colors.primary, theme.colors.cyan, theme.colors.pink, theme.colors.orange],
@@ -195,7 +194,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       setFinishing(false);
       setResultVisible(false);
       setResultSummary(null);
-      setRepeatUses(0);
+      setHintUses(0);
       clearEconomyFeedback();
     },
     [clearEconomyFeedback, config.totalSeconds],
@@ -609,24 +608,26 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     await trackSessionStart({ gameId: 'patternmemory', mode: 'normal' });
   }, [clearPlaybackQueue, isDaily, prepareFreshSession]);
 
-  const handleRepeatSequence = useCallback(async () => {
-    if (dailyBlockedReason || didFinish || finishing || sequence.length === 0) return;
-    if (repeatUses >= MAX_REPEAT_USES) return;
+  const handleShowNextStep = useCallback(async () => {
+    if (dailyBlockedReason || didFinish || finishing || phase !== 'input' || sequence.length === 0) return;
+    if (hintUses >= MAX_HINT_USES) return;
 
-    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.patternMemoryRepeatSequence, 'pattern_memory_repeat_sequence');
+    const nextTile = sequence[inputIndex];
+    if (typeof nextTile !== 'number') return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.patternMemoryRepeatSequence, 'pattern_memory_show_next_step');
     if (!spendResult.success) {
       showNeuroCoinError('No tienes suficientes NeuroCoins');
       return;
     }
 
     setNeuroCoins(spendResult.newBalance);
-    setRepeatUses((prev) => prev + 1);
+    setHintUses((prev) => prev + 1);
     showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.patternMemoryRepeatSequence);
 
-    setInputIndex(0);
-    setPromptAtMs(0);
-    playSequence(sequence);
-  }, [dailyBlockedReason, didFinish, finishing, playSequence, repeatUses, sequence, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+    flashTile(nextTile as TileId);
+    setPromptAtMs(Date.now());
+  }, [dailyBlockedReason, didFinish, finishing, flashTile, hintUses, inputIndex, phase, sequence, showNeuroCoinError, showNeuroCoinSpendFeedback]);
 
   const exitGame = useCallback(() => {
     clearPlaybackQueue();
@@ -643,16 +644,25 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
-        <Card variant="primary">
+        <Card
+          variant="primary"
+          style={{
+            borderWidth: 1.6,
+            borderColor: 'rgba(236,72,153,0.58)',
+            backgroundColor: theme.colors.bg1,
+            shadowColor: '#EC4899',
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Pattern Memory · {difficultyLabel(difficulty)}</Text>
             <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.totalSeconds} compact align="right" />
           </View>
           <View style={{ marginTop: 8 }}>
-            <Pill
-              label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`}
-              tone={isDaily ? 'warning' : 'default'}
-            />
+            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
             Ronda: {round}/{config.maxRound}
@@ -666,17 +676,19 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         </Card>
 
         {!dailyBlockedReason ? (
-          <Card style={{ padding: 10 }}>
+          <View style={{ gap: 6 }}>
             <NeuroCoinActionButton
-              label="Repetir"
-              icon="🔁"
+              label="Siguiente paso"
+              icon="✨"
               cost={NEURO_COIN_COSTS.patternMemoryRepeatSequence}
-              usesLeft={MAX_REPEAT_USES - repeatUses}
-              disabled={didFinish || finishing || sequence.length === 0 || repeatUses >= MAX_REPEAT_USES}
-              onPress={handleRepeatSequence}
+              usesLeft={MAX_HINT_USES - hintUses}
+              disabled={didFinish || finishing || phase !== 'input' || sequence.length === 0 || hintUses >= MAX_HINT_USES}
+              onPress={handleShowNextStep}
+              highlighted
+              tone="green"
             />
-            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
-          </Card>
+            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
+          </View>
         ) : null}
 
         {dailyBlockedReason ? (

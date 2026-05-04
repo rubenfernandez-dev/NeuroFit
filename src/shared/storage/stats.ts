@@ -3,6 +3,7 @@ import { STORAGE_KEYS } from './keys';
 import { nowISO } from '../utils/time';
 import { deleteItem, getItem, setItem } from './secureStore';
 import { captureException, logWarning } from '../observability';
+import { trackGameStarted } from '../../services/analytics';
 
 export type GameStats = {
   sessions: number;
@@ -179,7 +180,7 @@ export async function recordSession({ gameId, score, durationMs, won }: RecordSe
   return next;
 }
 
-export async function trackSessionStart({ gameId }: TrackContext): Promise<GameStats> {
+export async function trackSessionStart({ gameId, mode = 'normal' }: TrackContext): Promise<GameStats> {
   const all = await getAllStats();
   const current = normalizeStatsEntry(all[gameId]);
 
@@ -195,6 +196,7 @@ export async function trackSessionStart({ gameId }: TrackContext): Promise<GameS
 
   all[gameId] = next;
   await setItem(STORAGE_KEYS.stats, JSON.stringify(all));
+  void trackGameStarted({ gameId, mode });
   return next;
 }
 

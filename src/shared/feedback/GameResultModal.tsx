@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 import Card from '../ui/Card';
 import { useAppTheme } from '../theme/theme';
 import RewardModal from './RewardModal';
+import RewardLottie from './RewardLottie';
 import { RewardChestGrant } from '../gamification/rewardChest';
 
 type ResultVariant = 'victory' | 'defeat' | 'neutral';
@@ -33,6 +34,7 @@ type GameResultModalProps = {
   streakBonusTitle?: string;
   streakBonusText?: string;
   rewardChest?: RewardChestGrant;
+  leaguePromotion?: boolean;
 };
 
 export default function GameResultModal({
@@ -49,6 +51,7 @@ export default function GameResultModal({
   streakBonusTitle,
   streakBonusText,
   rewardChest,
+  leaguePromotion = false,
 }: GameResultModalProps) {
   const { theme } = useAppTheme();
   const entrance = useRef(new Animated.Value(0)).current;
@@ -167,7 +170,13 @@ export default function GameResultModal({
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Text style={{ fontSize: variant === 'victory' ? 30 : 24 }}>{variantMeta.icon}</Text>
+                {variant === 'victory' && leaguePromotion ? (
+                  <RewardLottie type="trophy" size={48} loop={false} autoPlay mountDelayMs={220} />
+                ) : variant === 'victory' ? (
+                  <RewardLottie type="confetti" size={40} loop={false} autoPlay mountDelayMs={220} />
+                ) : (
+                  <Text style={{ fontSize: variant === 'victory' ? 30 : 24 }}>{variantMeta.icon}</Text>
+                )}
                 <View
                   style={{
                     borderRadius: 999,

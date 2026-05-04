@@ -14,6 +14,7 @@ import {
   shouldGrantSessionBonus,
 } from '../session/sessionStreak';
 import { RewardChestGrant, progressRewardChest } from './rewardChest';
+import { trackGameFinished, trackStreakBonus } from '../../services/analytics';
 
 export type SessionMode = 'normal' | 'daily';
 
@@ -204,16 +205,29 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
     const completionPromise = (async () => {
       const result = await completeDailyGameSession(input);
       const rewardChest = await progressRewardChest(gameId);
-      if (!rewardChest) {
-        return result;
-      }
+      const finalResult = !rewardChest
+        ? result
+        : {
+            ...result,
+            earnedXp: result.earnedXp + (rewardChest.rewardType === 'xp' ? rewardChest.amount : 0),
+            earnedSp: result.earnedSp + (rewardChest.rewardType === 'neurocoins' ? rewardChest.amount : 0),
+            rewardChest,
+          };
 
-      return {
-        ...result,
-        earnedXp: result.earnedXp + (rewardChest.rewardType === 'xp' ? rewardChest.amount : 0),
-        earnedSp: result.earnedSp + (rewardChest.rewardType === 'neurocoins' ? rewardChest.amount : 0),
-        rewardChest,
-      };
+      void trackGameFinished({
+        gameId,
+        difficulty,
+        mode,
+        won,
+        durationMs: metrics.durationMs,
+        mistakes: metrics.mistakes,
+        score: rewardScore,
+        earnedXp: finalResult.earnedXp,
+        earnedNeuroCoins: finalResult.earnedSp,
+        sessionStreak: finalResult.sessionStreak,
+      });
+
+      return finalResult;
     })().finally(() => {
       dailyCompletionInFlight.delete(key);
     });
@@ -293,6 +307,14 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
       bonusXp: SESSION_STREAK_BONUS_XP,
       bonusSp: SESSION_STREAK_BONUS_SP,
     });
+    void trackStreakBonus({
+      gameId,
+      difficulty,
+      mode,
+      sessionStreak,
+      bonusXp: SESSION_STREAK_BONUS_XP,
+      bonusNeuroCoins: SESSION_STREAK_BONUS_SP,
+    });
 
     const rewardChest = await progressRewardChest(gameId);
     const totalEarnedXp = earnedXpWithBonus + (rewardChest?.rewardType === 'xp' ? rewardChest.amount : 0);
@@ -309,6 +331,18 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
       earnedSp: totalEarnedSp,
       sessionStreak,
       streakBonusGranted: true,
+    });
+    void trackGameFinished({
+      gameId,
+      difficulty,
+      mode,
+      won,
+      durationMs: metrics.durationMs,
+      mistakes: metrics.mistakes,
+      score: rewardScore,
+      earnedXp: totalEarnedXp,
+      earnedNeuroCoins: totalEarnedSp,
+      sessionStreak,
     });
     return { earnedXp: totalEarnedXp, earnedSp: totalEarnedSp, rewardChest, sessionStreak, streakBonus };
   }
@@ -328,6 +362,18 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
     earnedSp: totalEarnedSp,
     sessionStreak,
     streakBonusGranted: false,
+  });
+  void trackGameFinished({
+    gameId,
+    difficulty,
+    mode,
+    won,
+    durationMs: metrics.durationMs,
+    mistakes: metrics.mistakes,
+    score: rewardScore,
+    earnedXp: totalEarnedXp,
+    earnedNeuroCoins: totalEarnedSp,
+    sessionStreak,
   });
   return { earnedXp: totalEarnedXp, earnedSp: totalEarnedSp, rewardChest, sessionStreak, streakBonus };
 }

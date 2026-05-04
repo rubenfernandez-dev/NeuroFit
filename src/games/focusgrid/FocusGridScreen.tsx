@@ -6,7 +6,6 @@ import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
-import Pill from '../../shared/ui/Pill';
 import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
@@ -473,16 +472,25 @@ export default function FocusGridScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
-        <Card variant="primary">
+        <Card
+          variant="primary"
+          style={{
+            borderWidth: 1.6,
+            borderColor: 'rgba(34,211,238,0.58)',
+            backgroundColor: theme.colors.bg1,
+            shadowColor: '#22D3EE',
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Focus Grid · {difficultyLabel(difficulty)}</Text>
             <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.totalSeconds} compact align="right" />
           </View>
           <View style={{ marginTop: 8 }}>
-            <Pill
-              label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`}
-              tone={isDaily ? 'warning' : 'default'}
-            />
+            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
             Grid: {config.gridSize}x{config.gridSize}
@@ -493,7 +501,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         </Card>
 
         {!dailyBlockedReason ? (
-          <Card style={{ padding: 10 }}>
+          <View style={{ gap: 6 }}>
             <NeuroCoinActionButton
               label="Mostrar"
               icon="👁"
@@ -501,9 +509,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
               usesLeft={revealUsesLeft}
               disabled={!canReveal}
               onPress={handleRevealNext}
+              tone="blue"
             />
-            {revealFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{revealFeedback}</Text> : null}
-          </Card>
+            {revealFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{revealFeedback}</Text> : null}
+          </View>
         ) : null}
 
         {dailyBlockedReason ? (
@@ -520,9 +529,11 @@ export default function FocusGridScreen({ route, navigation }: Props) {
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, textAlign: 'center' }]}>
               Toca los números en orden ascendente lo más rápido posible.
             </Text>
-            <Text style={[theme.typography.body, { color: theme.colors.text, textAlign: 'center', marginTop: 6 }]}>
-              {phase === 'playing' ? `Siguiente: ${Math.min(nextExpected, totalCells)}` : 'Pulsa Empezar'}
-            </Text>
+            {phase === 'playing' ? (
+              <Text style={[theme.typography.body, { color: theme.colors.text, textAlign: 'center', marginTop: 6 }]}>
+                {`Siguiente: ${Math.min(nextExpected, totalCells)}`}
+              </Text>
+            ) : null}
 
             <FocusGridBoard
               numbers={numbers}
@@ -546,12 +557,22 @@ export default function FocusGridScreen({ route, navigation }: Props) {
             title={phase === 'idle' || phase === 'finished' ? 'Empezar' : 'En juego'}
             onPress={startGame}
             disabled={!!dailyBlockedReason || didFinish || phase === 'playing'}
-            style={{ flex: 1 }}
+            style={{ flex: 1, minHeight: 44 }}
           />
-          <Button title="Salir" variant="secondary" onPress={exitGame} style={{ flex: 1 }} />
+          <Button
+            title="Reiniciar"
+            variant="ghost"
+            onPress={restart}
+            disabled={isDaily || !!dailyBlockedReason}
+            style={{ flex: 1, minHeight: 44 }}
+          />
+          <Button
+            title="Salir"
+            variant="primary"
+            onPress={exitGame}
+            style={{ flex: 1, minHeight: 44, backgroundColor: theme.colors.red, borderColor: theme.colors.red }}
+          />
         </View>
-
-        <Button title="Reintentar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
       </Screen>
 
       <FocusGridResultModal

@@ -13,7 +13,6 @@ import { captureException, classifyDataFailure, formatLoadFailureMessage } from 
 import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 import { logEvent } from '../core/telemetry';
 import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
-import { formatNeuroCoinCost, formatNeuroCoins } from '../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type LeagueStatus = 'ascenso' | 'media' | 'descenso' | 'sin_datos';
@@ -42,6 +41,10 @@ function getUserDeltaToNext(players: LeaderboardEntry[], userPosition?: number):
   return Math.max(0, nextAbove.seasonPoints - current.seasonPoints + 1);
 }
 
+function formatXp(value: number): string {
+  return `${Math.max(0, Math.floor(value)).toLocaleString()} XP`;
+}
+
 function getTimeUntilReset(now = new Date()): { days: number; hours: number; label: string } {
   const target = new Date(now);
   const day = now.getDay();
@@ -63,6 +66,7 @@ async function generateMockLeaderboard(userSP: number, leagueId: 'bronze' | 'sil
     userSeasonPoints: userSP,
     userName,
     size: 50,
+    scoreScale: 5,
   });
 }
 
@@ -83,7 +87,7 @@ export default function LeaderboardScreen() {
     setIsLoading(true);
     try {
       const profile = await ensureSeasonCurrent();
-      const board = await generateMockLeaderboard(profile.seasonPoints, profile.leagueId, profile.seasonId, 'Tu');
+      const board = await generateMockLeaderboard(profile.xpTotal, profile.leagueId, profile.seasonId, 'Tu');
 
       setSeasonId(profile.seasonId);
       setXpTotal(profile.xpTotal);
@@ -135,12 +139,12 @@ export default function LeaderboardScreen() {
     : 1;
 
   const userEntry = useMemo(() => entries.find((entry) => entry.isUser) ?? null, [entries]);
-  const top10Cut = entries.find((entry) => entry.rank === getPromotionCutoff())?.seasonPoints ?? seasonPoints;
-  const spToTop10 = Math.max(0, top10Cut - seasonPoints + 1);
+  const top10Cut = entries.find((entry) => entry.rank === getPromotionCutoff())?.seasonPoints ?? xpTotal;
+  const xpToTop10 = Math.max(0, top10Cut - xpTotal + 1);
   const deltaToNext = getUserDeltaToNext(entries, userEntry?.rank);
   const demotionCutoff = getDemotionCutoff(entries.length);
   const demotionEntry = entries.find((entry) => entry.rank === demotionCutoff);
-  const spOverDemotion = demotionEntry ? seasonPoints - demotionEntry.seasonPoints : null;
+  const xpOverDemotion = demotionEntry ? xpTotal - demotionEntry.seasonPoints : null;
   const leagueStatus = getLeagueStatus(userEntry?.rank, entries.length);
   const resetClock = getTimeUntilReset();
 
@@ -244,9 +248,9 @@ export default function LeaderboardScreen() {
                 </View>
                 <View style={{ marginTop: 10 }}>
                   <AnimatedProgressBar
-                    value={spToTop10 > 0 ? Math.max(0, Math.min(1, seasonPoints / (seasonPoints + spToTop10))) : 1}
+                    value={xpToTop10 > 0 ? Math.max(0, Math.min(1, xpTotal / (xpTotal + xpToTop10))) : 1}
                     color={leagueAccent}
-                    label={spToTop10 > 0 ? `Te faltan ${formatNeuroCoins(spToTop10)} para Top 10` : 'Ya estas en zona de ascenso'}
+                    label={xpToTop10 > 0 ? `Te faltan ${formatXp(xpToTop10)} para Top 10` : 'Ya estas en zona de ascenso'}
                     durationMs={520}
                     height={10}
                   />
@@ -254,10 +258,10 @@ export default function LeaderboardScreen() {
 
                 <View style={{ marginTop: 10, gap: 4 }}>
                   <Text style={{ color: theme.colors.muted }}>
-                    {spOverDemotion !== null
-                      ? spOverDemotion >= 0
-                        ? `Margen sobre descenso: +${formatNeuroCoinCost(spOverDemotion)} ⚡`
-                        : `Estas a ${formatNeuroCoinCost(Math.abs(spOverDemotion))} de salir de descenso`
+                    {xpOverDemotion !== null
+                      ? xpOverDemotion >= 0
+                        ? `Margen sobre descenso: +${formatXp(xpOverDemotion)}`
+                        : `Estas a ${formatXp(Math.abs(xpOverDemotion))} de salir de descenso`
                       : 'Sin referencia de descenso disponible'}
                   </Text>
                   <Text style={{ color: theme.colors.muted }}>
@@ -276,13 +280,13 @@ export default function LeaderboardScreen() {
                       <Text style={[theme.typography.h3, { color: theme.colors.text }]}>#{userEntry.rank}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                      <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>NeuroCoins</Text>
-                      <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{formatNeuroCoins(userEntry.seasonPoints)}</Text>
+                      <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted }]}>XP</Text>
+                      <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{formatXp(userEntry.seasonPoints)}</Text>
                     </View>
                     <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 10 }]}>
                       {deltaToNext === null
                         ? 'Estas en la cima de tu liga. Excelente trabajo.'
-                        : `Te faltan ${formatNeuroCoins(deltaToNext)} para superar al siguiente jugador.`}
+                        : `Te faltan ${formatXp(deltaToNext)} para superar al siguiente jugador.`}
                     </Text>
                   </>
                 ) : (
@@ -352,7 +356,7 @@ export default function LeaderboardScreen() {
                       {entry.isUser ? <Text style={[theme.typography.caption, { color: theme.colors.primary }]}>Tu cuenta</Text> : null}
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{formatNeuroCoins(entry.seasonPoints)}</Text>
+                      <Text style={{ color: theme.colors.text, fontWeight: '700' }}>{formatXp(entry.seasonPoints)}</Text>
                       {entry.rank <= getPromotionCutoff() ? <Pill label="Ascenso" tone="success" /> : null}
                       {entry.rank >= demotionCutoff ? <Pill label="Descenso" tone="danger" /> : null}
                     </View>

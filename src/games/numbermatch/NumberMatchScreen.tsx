@@ -6,7 +6,6 @@ import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import Screen from '../../shared/ui/Screen';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
-import Pill from '../../shared/ui/Pill';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock, nowISO } from '../../shared/utils/time';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
@@ -608,13 +607,22 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
-        <Card variant="primary">
+        <Card
+          variant="primary"
+          style={{
+            borderWidth: 1.6,
+            borderColor: 'rgba(167,139,250,0.58)',
+            backgroundColor: theme.colors.bg1,
+            shadowColor: '#A78BFA',
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
+          }}
+        >
           <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Number Match · {difficultyLabel(difficulty)}</Text>
           <View style={{ marginTop: 8 }}>
-            <Pill
-              label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`}
-              tone={isDaily ? 'warning' : 'default'}
-            />
+            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
             Cronometro: {msToClock(elapsedSec * 1000)} · Puntaje: {score} · Combo: x{Math.max(1, combo)}
@@ -703,7 +711,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
         </View>
 
         {!dailyBlockedReason ? (
-          <Card style={{ padding: 10 }}>
+          <View style={{ gap: 6 }}>
             <NeuroCoinActionButton
               label="Sugerir"
               icon="💡"
@@ -711,9 +719,10 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
               usesLeft={MAX_SUGGEST_USES - suggestUses}
               disabled={phase !== 'playing' || didFinish || finishing || suggestUses >= MAX_SUGGEST_USES}
               onPress={handleSuggestMove}
+              tone="blue"
             />
-            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
-          </Card>
+            {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
+          </View>
         ) : null}
 
         <View style={{ flexDirection: 'row', gap: 8 }}>

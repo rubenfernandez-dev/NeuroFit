@@ -1,6 +1,7 @@
 import { logEvent } from '../../core/telemetry';
 import { getProfile, updateProfile } from '../storage/profile';
 import { toSafeNeuroCoinAmount } from './neuroCoins';
+import { trackHelpUsed, trackNeuroCoinsEarned, trackNeuroCoinsSpent } from '../../services/analytics';
 
 export type NeuroCoinReason =
   | 'focus_grid_reveal_next'
@@ -23,6 +24,17 @@ export type SpendResult = {
   reason?: string;
   error?: SpendError;
 };
+
+const HELP_REASONS = new Set<NeuroCoinReason>([
+  'focus_grid_reveal_next',
+  'speed_match_extra_time',
+  'memory_reveal_cards',
+  'pattern_memory_repeat_sequence',
+  'number_match_suggest_move',
+  'mental_math_extra_time',
+  'mental_math_skip_question',
+  'sudoku_recover_mistake',
+]);
 
 export async function getCurrentNeuroCoins(): Promise<number> {
   try {
@@ -82,6 +94,18 @@ export async function spendNeuroCoins(cost: number, reason: NeuroCoinReason = 'u
       previousBalance: currentBalance,
       newBalance: finalBalance,
     });
+    void trackNeuroCoinsSpent({
+      amount: safeCost,
+      previousBalance: currentBalance,
+      newBalance: finalBalance,
+      reason,
+    });
+    if (HELP_REASONS.has(reason)) {
+      void trackHelpUsed({
+        helpId: reason,
+        cost: safeCost,
+      });
+    }
 
     return {
       success: true,
@@ -116,6 +140,12 @@ export async function addNeuroCoins(amount: number, reason: NeuroCoinReason = 'r
       amount: safeAmount,
       previousBalance: currentBalance,
       newBalance: finalBalance,
+    });
+    void trackNeuroCoinsEarned({
+      amount: safeAmount,
+      balance: finalBalance,
+      reason,
+      source: 'neuro_coin_service',
     });
 
     return finalBalance;

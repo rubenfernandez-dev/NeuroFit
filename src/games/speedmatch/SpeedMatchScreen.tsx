@@ -7,7 +7,6 @@ import { computeSpeedMatchRewardScore, evaluateSpeedMatchWin, getSpeedMatchConfi
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
-import Pill from '../../shared/ui/Pill';
 import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
@@ -447,13 +446,25 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     <>
       <Screen>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
-        <Card variant="cyan">
+        <Card
+          variant="cyan"
+          style={{
+            borderWidth: 1.6,
+            borderColor: 'rgba(251,146,60,0.58)',
+            backgroundColor: theme.colors.bg1,
+            shadowColor: '#FB923C',
+            shadowOpacity: 0.16,
+            shadowRadius: 12,
+            shadowOffset: { width: 0, height: 6 },
+            elevation: 3,
+          }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
             <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
             <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.durationSec} compact align="right" />
           </View>
           <View style={{ marginTop: 8 }}>
-            <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
             Ronda: {round}

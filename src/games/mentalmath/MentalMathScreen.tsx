@@ -5,7 +5,6 @@ import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
 import { generateQuestions } from './logic/questions';
 import { computeMentalMathRewardScore, evaluateMentalMathWin, getMentalMathSessionConfig } from './logic/session';
-import HUD from './components/HUD';
 import Button from '../../shared/ui/Button';
 import Card from '../../shared/ui/Card';
 import { useAppTheme } from '../../shared/theme/theme';
@@ -14,7 +13,6 @@ import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { getProfile } from '../../shared/storage/profile';
 import Screen from '../../shared/ui/Screen';
-import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playDefeatFeedback, playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
@@ -389,23 +387,53 @@ export default function MentalMathScreen({ route, navigation }: Props) {
   return (
     <>
     <Screen>
-      <HUD timeLeft={timeLeft} correct={correct} wrong={wrong} />
       <PlayerEconomyBar xp={xpTotal} neuroCoins={neuroCoins} compact />
 
-      <Card variant="pink">
+      <Card
+        variant="pink"
+        style={{
+          borderWidth: 1.6,
+          borderColor: 'rgba(167,139,250,0.58)',
+          backgroundColor: theme.colors.bg1,
+          shadowColor: '#A78BFA',
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 3,
+        }}
+      >
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Mental Math · {difficultyLabel(difficulty)}</Text>
-        <View style={{ marginTop: 8 }}>
-          <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+        <View style={{ marginTop: 8, flexDirection: 'row', gap: 12, alignItems: 'stretch' }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
+            <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
+            <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Respuesta: {inputValue || '...'}</Text>
+            <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
+              +{sessionConfig.bonusOnCorrectSec}s por acierto · Máx. fallos: {sessionConfig.maxErrors}
+            </Text>
+          </View>
+
+          <View
+            style={{
+              width: 118,
+              borderWidth: 1,
+              borderColor: 'rgba(148,163,184,0.30)',
+              borderRadius: 14,
+              backgroundColor: theme.mode === 'dark' ? 'rgba(15,23,42,0.44)' : 'rgba(241,245,249,0.90)',
+              paddingHorizontal: 8,
+              paddingVertical: 6,
+              justifyContent: 'space-between',
+            }}
+          >
+            <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 30, lineHeight: 34, textAlign: 'center' }}>⏱ {timeLeft}s</Text>
+            <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 30, lineHeight: 34, textAlign: 'center', marginTop: 2 }}>✅ {correct}</Text>
+            <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 30, lineHeight: 34, textAlign: 'center' }}>❌ {wrong}</Text>
+          </View>
         </View>
-        <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
-        <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Respuesta: {inputValue || '...'}</Text>
-        <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-          +{sessionConfig.bonusOnCorrectSec}s por acierto · Máx. fallos: {sessionConfig.maxErrors}
-        </Text>
       </Card>
 
       {!dailyBlockedReason ? (
-        <Card style={{ padding: 10 }}>
+        <View style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <View style={{ flex: 1 }}>
               <NeuroCoinActionButton
@@ -415,6 +443,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
                 usesLeft={MAX_EXTRA_TIME_USES - extraTimeUses}
                 disabled={didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES}
                 onPress={handleBuyExtraTime}
+                tone="blue"
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -425,13 +454,14 @@ export default function MentalMathScreen({ route, navigation }: Props) {
                 usesLeft={MAX_SKIP_USES - skipUses}
                 disabled={didFinish || skipUses >= MAX_SKIP_USES}
                 onPress={handleSkipQuestion}
+                tone="green"
               />
             </View>
           </View>
           {economyFeedback ? (
-            <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text>
+            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text>
           ) : null}
-        </Card>
+        </View>
       ) : null}
 
       {dailyBlockedReason ? (

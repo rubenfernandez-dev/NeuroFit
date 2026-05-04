@@ -9,18 +9,6 @@ type CardProps = PropsWithChildren<{
 
 export default function Card({ children, style, variant = 'default' }: CardProps) {
   const { theme } = useAppTheme();
-  const accentColor =
-    variant === 'primary'
-      ? theme.colors.primary
-      : variant === 'success'
-        ? theme.colors.green
-        : variant === 'warning'
-          ? theme.colors.orange
-          : variant === 'pink'
-            ? theme.colors.pink
-            : variant === 'cyan'
-              ? theme.colors.cyan
-              : 'transparent';
 
   return (
     <View
@@ -34,9 +22,6 @@ export default function Card({ children, style, variant = 'default' }: CardProps
         style,
       ]}
     >
-      {variant !== 'default' ? (
-        <View style={[styles.accent, { backgroundColor: accentColor }]} />
-      ) : null}
       {children}
     </View>
   );
@@ -48,10 +33,5 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     overflow: 'hidden',
-  },
-  accent: {
-    height: 4,
-    borderRadius: 999,
-    marginBottom: 10,
   },
 });

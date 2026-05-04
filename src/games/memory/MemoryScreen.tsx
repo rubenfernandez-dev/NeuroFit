@@ -15,7 +15,6 @@ import { trackSessionStart, trackWin } from '../../shared/storage/stats';
 import { ensureDailyToday, markDailyStageStarted } from '../../shared/storage/daily';
 import { getProfile } from '../../shared/storage/profile';
 import Screen from '../../shared/ui/Screen';
-import Pill from '../../shared/ui/Pill';
 import { completeGameSession } from '../../shared/gamification/sessionCompletion';
 import { playErrorFeedback, playStreakBonusFeedback, playSuccessFeedback, playVictoryFeedback } from '../../shared/feedback/gameFeedback';
 import GameResultModal from '../../shared/feedback/GameResultModal';
@@ -409,10 +408,22 @@ export default function MemoryScreen({ route, navigation }: Props) {
     <>
     <Screen>
       <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
-      <Card variant="cyan">
+      <Card
+        variant="cyan"
+        style={{
+          borderWidth: 1.6,
+          borderColor: 'rgba(236,72,153,0.58)',
+          backgroundColor: theme.colors.bg1,
+          shadowColor: '#EC4899',
+          shadowOpacity: 0.16,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 3,
+        }}
+      >
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Memory · {difficultyLabel(difficulty)}</Text>
         <View style={{ marginTop: 8 }}>
-          <Pill label={isDaily ? `Reto diario · ${difficultyLabel(difficulty)}` : `Modo normal · ${difficultyLabel(difficulty)}`} tone={isDaily ? 'warning' : 'default'} />
+          {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
         </View>
         <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>
           Tiempo: {msToClock(elapsedMs)} · Intentos: {attempts}
@@ -423,7 +434,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
       </Card>
 
       {!dailyBlockedReason ? (
-        <Card style={{ padding: 10 }}>
+        <View style={{ gap: 6 }}>
           <NeuroCoinActionButton
             label="Revelar"
             icon="🃏"
@@ -431,9 +442,10 @@ export default function MemoryScreen({ route, navigation }: Props) {
             usesLeft={MAX_REVEAL_USES - revealUses}
             disabled={didFinish || previewActive || lockInput || revealUses >= MAX_REVEAL_USES}
             onPress={handleRevealCards}
+            tone="blue"
           />
-          {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
-        </Card>
+          {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
+        </View>
       ) : null}
 
       {dailyBlockedReason ? (

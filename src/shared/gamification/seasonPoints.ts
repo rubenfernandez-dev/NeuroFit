@@ -3,6 +3,7 @@ import { getLeagueById, League } from './leagues';
 import { ensureSeasonCurrent, getProfile, updateProfile } from '../storage/profile';
 import { computeSp } from '../../core/gamification/economy';
 import { logEvent } from '../../core/telemetry';
+import { trackNeuroCoinsEarned } from '../../services/analytics';
 
 type CalcSeasonPointsInput = {
   gameId: GameId;
@@ -60,6 +61,14 @@ export async function grantSeasonPoints(input: CalcSeasonPointsInput): Promise<{
   });
 
   logEvent('sp_granted', { gameId: input.gameId, difficulty: input.difficulty, isDaily: input.isDaily, earnedSeasonPoints, seasonPoints: updated.seasonPoints });
+  void trackNeuroCoinsEarned({
+    amount: earnedSeasonPoints,
+    balance: updated.seasonPoints,
+    reason: input.isDaily ? 'daily_gameplay' : 'gameplay',
+    gameId: input.gameId,
+    difficulty: input.difficulty,
+    source: 'grant_season_points',
+  });
 
   return {
     earnedSeasonPoints,
@@ -88,6 +97,14 @@ export async function grantFlatSeasonPoints(input: GrantFlatSeasonPointsInput): 
     source: input.source ?? 'manual',
     earnedSeasonPoints,
     seasonPoints: updated.seasonPoints,
+  });
+  void trackNeuroCoinsEarned({
+    amount: earnedSeasonPoints,
+    balance: updated.seasonPoints,
+    reason: input.source ?? 'manual',
+    gameId: input.gameId,
+    difficulty: input.difficulty,
+    source: 'grant_flat_season_points',
   });
 
   return {
