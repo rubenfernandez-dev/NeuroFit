@@ -63,12 +63,12 @@ export function createRoundRng(seed: number): RNG {
   return createSeededRng(seed);
 }
 
-export function createInitialSequence(rng: RNG): TileId[] {
-  return [randomInt(0, 3, rng) as TileId];
+export function createInitialSequence(rng: RNG, tileCount = 4): TileId[] {
+  return [randomInt(0, tileCount - 1, rng) as TileId];
 }
 
-export function appendSequenceStep(sequence: TileId[], rng: RNG): TileId[] {
-  return [...sequence, randomInt(0, 3, rng) as TileId];
+export function appendSequenceStep(sequence: TileId[], rng: RNG, tileCount = 4): TileId[] {
+  return [...sequence, randomInt(0, tileCount - 1, rng) as TileId];
 }
 
 export function isCorrectTap(sequence: TileId[], inputIndex: number, tappedTile: TileId): boolean {

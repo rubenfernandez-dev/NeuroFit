@@ -1,6 +1,6 @@
 import { Difficulty, GameId } from '../types';
 
-export type TileId = 0 | 1 | 2 | 3;
+export type TileId = number;
 
 export type PatternMemoryMetrics = {
   score: number;

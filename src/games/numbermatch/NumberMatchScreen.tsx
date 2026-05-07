@@ -34,10 +34,12 @@ import { resetSessionStreak } from '../../shared/session/sessionStreak';
 import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'NumberMatch'>;
 
@@ -100,6 +102,7 @@ function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
 
 export default function NumberMatchScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
@@ -135,8 +138,12 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
   const [suggestUses, setSuggestUses] = useState(0);
+  const [restoreMistakeUses, setRestoreMistakeUses] = useState(0);
+  const [removeCellUses, setRemoveCellUses] = useState(0);
   const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
-  const MAX_SUGGEST_USES = 2;
+  const MAX_SUGGEST_USES = 3;
+  const MAX_RESTORE_MISTAKE_USES = 3;
+  const MAX_REMOVE_CELL_USES = 3;
 
   const clearFeedback = useCallback(() => {
     if (feedbackTimerRef.current) {
@@ -185,6 +192,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     setResultVisible(false);
     setResultSummary(null);
     setSuggestUses(0);
+    setRestoreMistakeUses(0);
+    setRemoveCellUses(0);
     clearSuggestion();
     clearEconomyFeedback();
   }, [clearFeedback, config.cols, config.initialFilled, config.rows, config.totalSeconds]);
@@ -601,11 +610,66 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
     }, 1000);
   }, [board, config.cols, dailyBlockedReason, didFinish, finishing, phase, showNeuroCoinError, showNeuroCoinSpendFeedback, suggestUses, clearSuggestion]);
 
+  const handleRestoreMistake = useCallback(async () => {
+    if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    if (restoreMistakeUses >= MAX_RESTORE_MISTAKE_USES) return;
+    if (invalidMatches <= 0) {
+      showNeuroCoinError('No tienes fallos que recuperar');
+      return;
+    }
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.numberMatchRestoreMistake, 'number_match_restore_mistake');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+    setNeuroCoins(spendResult.newBalance);
+    setInvalidMatches((prev) => Math.max(0, prev - 1));
+    setRestoreMistakeUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.numberMatchRestoreMistake);
+  }, [dailyBlockedReason, didFinish, finishing, invalidMatches, phase, restoreMistakeUses, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+
+  const handleRemoveCell = useCallback(async () => {
+    if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    if (removeCellUses >= MAX_REMOVE_CELL_USES) return;
+    if (selectedIndex === null) {
+      showNeuroCoinError('Selecciona una celda primero');
+      return;
+    }
+    if (board[selectedIndex] === null) {
+      showNeuroCoinError('La celda ya está vacía');
+      return;
+    }
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.numberMatchRemovePairFromSelected, 'number_match_remove_cell');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+    const nextBoard = [...board];
+    nextBoard[selectedIndex] = null;
+    setBoard(nextBoard);
+    setNeuroCoins(spendResult.newBalance);
+    setRemoveCellUses((prev) => prev + 1);
+    setSelectedIndex(null);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.numberMatchRemovePairFromSelected);
+  }, [board, dailyBlockedReason, didFinish, finishing, phase, removeCellUses, selectedIndex, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+
+  const handlePaidAddLine = useCallback(async () => {
+    if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.numberMatchAddLine, 'number_match_add_line');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+    setNeuroCoins(spendResult.newBalance);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.numberMatchAddLine);
+    addLine();
+  }, [addLine, dailyBlockedReason, didFinish, finishing, phase, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+
   const boardClearedPercent = computeBoardClearedPercent(board);
 
   return (
     <>
-      <Screen>
+      <Screen scroll={false}>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card
           variant="primary"
@@ -625,10 +689,10 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
             {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
           <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Cronometro: {msToClock(elapsedSec * 1000)} · Puntaje: {score} · Combo: x{Math.max(1, combo)}
+            ⏱ {msToClock(elapsedSec * 1000)} · Puntaje: {score}
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Matches validos: {validMatches} · Invalidos: {invalidMatches} · Lineas: {linesUsed} · Limpieza: {boardClearedPercent}%
+            ✔️ {validMatches} · ❌ {invalidMatches} · Limpieza: {boardClearedPercent}%
           </Text>
         </Card>
 
@@ -707,20 +771,43 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
             disabled={!!dailyBlockedReason || didFinish || phase === 'playing'}
             style={{ flex: 1 }}
           />
-          <Button title="Anadir linea" variant="secondary" onPress={addLine} disabled={!!dailyBlockedReason || phase !== 'playing' || didFinish} style={{ flex: 1 }} />
         </View>
 
         {!dailyBlockedReason ? (
           <View style={{ gap: 6 }}>
-            <NeuroCoinActionButton
-              label="Sugerir"
-              icon="💡"
-              cost={NEURO_COIN_COSTS.numberMatchSuggestMove}
-              usesLeft={MAX_SUGGEST_USES - suggestUses}
-              disabled={phase !== 'playing' || didFinish || finishing || suggestUses >= MAX_SUGGEST_USES}
-              onPress={handleSuggestMove}
-              tone="blue"
-            />
+            <HelpActionsGrid>
+              <NeuroCoinActionButton
+                label="Sugerir"
+                icon="💡"
+                cost={NEURO_COIN_COSTS.numberMatchSuggestMove}
+                usesLeft={MAX_SUGGEST_USES - suggestUses}
+                disabled={phase !== 'playing' || didFinish || finishing || suggestUses >= MAX_SUGGEST_USES}
+                onPress={handleSuggestMove}
+              />
+              <NeuroCoinActionButton
+                label="Restaurar fallo"
+                icon="🩹"
+                cost={NEURO_COIN_COSTS.numberMatchRestoreMistake}
+                usesLeft={MAX_RESTORE_MISTAKE_USES - restoreMistakeUses}
+                disabled={phase !== 'playing' || didFinish || finishing || restoreMistakeUses >= MAX_RESTORE_MISTAKE_USES || invalidMatches <= 0}
+                onPress={handleRestoreMistake}
+              />
+              <NeuroCoinActionButton
+                label="Borrar celda"
+                icon="🗑️"
+                cost={NEURO_COIN_COSTS.numberMatchRemovePairFromSelected}
+                usesLeft={MAX_REMOVE_CELL_USES - removeCellUses}
+                disabled={phase !== 'playing' || didFinish || finishing || removeCellUses >= MAX_REMOVE_CELL_USES || selectedIndex === null}
+                onPress={handleRemoveCell}
+              />
+              <NeuroCoinActionButton
+                label="Añadir línea"
+                icon="➕"
+                cost={NEURO_COIN_COSTS.numberMatchAddLine}
+                disabled={phase !== 'playing' || didFinish || finishing}
+                onPress={handlePaidAddLine}
+              />
+            </HelpActionsGrid>
             {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
           </View>
         ) : null}

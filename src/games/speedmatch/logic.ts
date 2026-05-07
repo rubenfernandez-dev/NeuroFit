@@ -15,11 +15,11 @@ export type SpeedMatchDifficultyConfig = {
 };
 
 export const SPEEDMATCH_CONFIG: Record<Difficulty, SpeedMatchDifficultyConfig> = {
-  principiante: { durationSec: 60, symbolCount: 3, matchProbability: 0.5, stimulusIntervalMs: 900, maxMistakes: 12, minAccuracyPctToWin: 50, minCorrectToWin: 8 },
-  avanzado: { durationSec: 60, symbolCount: 4, matchProbability: 0.42, stimulusIntervalMs: 780, maxMistakes: 11, minAccuracyPctToWin: 55, minCorrectToWin: 10 },
-  experto: { durationSec: 56, symbolCount: 5, matchProbability: 0.34, stimulusIntervalMs: 670, maxMistakes: 10, minAccuracyPctToWin: 58, minCorrectToWin: 12 },
-  maestro: { durationSec: 52, symbolCount: 6, matchProbability: 0.27, stimulusIntervalMs: 560, maxMistakes: 9, minAccuracyPctToWin: 62, minCorrectToWin: 14 },
-  gran_maestro: { durationSec: 48, symbolCount: 7, matchProbability: 0.2, stimulusIntervalMs: 470, maxMistakes: 8, minAccuracyPctToWin: 65, minCorrectToWin: 16 },
+  principiante: { durationSec: 60, symbolCount: 2, matchProbability: 0.5, stimulusIntervalMs: 420, maxMistakes: 12, minAccuracyPctToWin: 50, minCorrectToWin: 8 },
+  avanzado: { durationSec: 60, symbolCount: 3, matchProbability: 0.42, stimulusIntervalMs: 420, maxMistakes: 11, minAccuracyPctToWin: 55, minCorrectToWin: 10 },
+  experto: { durationSec: 56, symbolCount: 4, matchProbability: 0.34, stimulusIntervalMs: 420, maxMistakes: 10, minAccuracyPctToWin: 58, minCorrectToWin: 12 },
+  maestro: { durationSec: 52, symbolCount: 5, matchProbability: 0.27, stimulusIntervalMs: 420, maxMistakes: 9, minAccuracyPctToWin: 62, minCorrectToWin: 14 },
+  gran_maestro: { durationSec: 48, symbolCount: 6, matchProbability: 0.2, stimulusIntervalMs: 420, maxMistakes: 8, minAccuracyPctToWin: 65, minCorrectToWin: 16 },
 };
 
 export function getSpeedMatchConfig(difficulty: Difficulty): SpeedMatchDifficultyConfig {

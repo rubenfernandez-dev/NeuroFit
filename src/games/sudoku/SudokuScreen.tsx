@@ -28,7 +28,9 @@ import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Sudoku'>;
 const MAX_MISTAKES = 5;
@@ -62,6 +64,7 @@ type VictorySummary = {
 
 export default function SudokuScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const gameRoute = normalizeGameRouteParams(route.params);
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
@@ -96,9 +99,13 @@ export default function SudokuScreen({ route, navigation }: Props) {
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
   const [recoverMistakeUses, setRecoverMistakeUses] = useState(0);
+  const [fillCellUses, setFillCellUses] = useState(0);
+  const [randomHintUses, setRandomHintUses] = useState(0);
   const [economyFeedback, setEconomyFeedback] = useState<string | null>(null);
 
-  const MAX_RECOVER_MISTAKE_USES = 2;
+  const MAX_RECOVER_MISTAKE_USES = 3;
+  const MAX_FILL_CELL_USES = 3;
+  const MAX_RANDOM_HINT_USES = 3;
 
   const selectedRow = Math.floor(selectedIndex / 9);
   const selectedCol = selectedIndex % 9;
@@ -526,6 +533,8 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setCompletionPulse(EMPTY_UNIT_COMPLETION_PULSE);
     setCompletionPulseVisible(false);
     setRecoverMistakeUses(0);
+    setFillCellUses(0);
+    setRandomHintUses(0);
     setEconomyFeedback(null);
     trackSessionStart({ gameId: 'sudoku', mode: isDaily ? 'daily' : 'normal' });
   };
@@ -549,6 +558,57 @@ export default function SudokuScreen({ route, navigation }: Props) {
     setNeuroCoins(result.newBalance);
     setEconomyFeedback(`-${NEURO_COIN_COSTS.sudokuRecoverMistake} 🪙`);
     void playSuccessFeedback();
+  };
+
+  const handleFillSelectedCell = async () => {
+    if (dailyBlockedReason || didWin || gameOver) return;
+    if (fillCellUses >= MAX_FILL_CELL_USES) return;
+    if (grid.length !== 9 || solution.length !== 81) return;
+    const cellValue = grid[selectedRow]?.[selectedCol];
+    const correctValue = solution[selectedIndex];
+    if (!correctValue || cellValue === correctValue) {
+      Alert.alert('Celda ya correcta', 'Esta celda ya tiene el valor correcto.');
+      return;
+    }
+    const result = await spendNeuroCoins(NEURO_COIN_COSTS.sudokuFillSelectedCell, 'sudoku_fill_selected_cell');
+    if (!result.success) {
+      Alert.alert('Saldo insuficiente', 'No tienes suficientes NeuroCoins');
+      return;
+    }
+    const nextGrid = cloneGrid(grid);
+    nextGrid[selectedRow][selectedCol] = correctValue;
+    setGrid(nextGrid);
+    setFillCellUses((prev) => prev + 1);
+    setNeuroCoins(result.newBalance);
+    setEconomyFeedback(`-${NEURO_COIN_COSTS.sudokuFillSelectedCell} 🪙`);
+    void playSuccessFeedback();
+    await completeIfSolved(nextGrid);
+  };
+
+  const handleRandomHint = async () => {
+    if (dailyBlockedReason || didWin || gameOver) return;
+    if (randomHintUses >= MAX_RANDOM_HINT_USES) return;
+    if (grid.length !== 9 || solution.length !== 81) return;
+    const flatGrid = flattenGrid(grid);
+    const emptyCells = flatGrid.reduce<number[]>((acc, v, i) => (v === 0 ? [...acc, i] : acc), []);
+    if (emptyCells.length === 0) return;
+    const result = await spendNeuroCoins(NEURO_COIN_COSTS.sudokuRandomHint, 'sudoku_random_hint');
+    if (!result.success) {
+      Alert.alert('Saldo insuficiente', 'No tienes suficientes NeuroCoins');
+      return;
+    }
+    const pickIndex = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+    const row = Math.floor(pickIndex / 9);
+    const col = pickIndex % 9;
+    const nextGrid = cloneGrid(grid);
+    nextGrid[row][col] = solution[pickIndex];
+    setGrid(nextGrid);
+    setSelectedIndex(pickIndex);
+    setRandomHintUses((prev) => prev + 1);
+    setNeuroCoins(result.newBalance);
+    setEconomyFeedback(`-${NEURO_COIN_COSTS.sudokuRandomHint} 🪙`);
+    void playSuccessFeedback();
+    await completeIfSolved(nextGrid);
   };
 
   const checkBoard = async () => {
@@ -604,7 +664,7 @@ export default function SudokuScreen({ route, navigation }: Props) {
           <Card
             variant="cyan"
             style={{
-              padding: compactLayout ? 12 : 16,
+              padding: compactLayout ? 8 : 10,
               borderWidth: 1.6,
               borderColor: 'rgba(167,139,250,0.58)',
               backgroundColor: theme.colors.bg1,
@@ -615,14 +675,14 @@ export default function SudokuScreen({ route, navigation }: Props) {
               elevation: 3,
             }}
           >
-            <Text style={[theme.typography.h3, { color: theme.colors.text }]} numberOfLines={1}>Sudoku · {difficultyLabel(difficulty)}</Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, gap: 8 }}>
-              {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : <View />}
-              <Text style={{ color: mistakes >= 4 ? theme.colors.danger : theme.colors.textMuted, fontSize: compactLayout ? 12 : 14 }} numberOfLines={1}>Fallos: {mistakes}/{MAX_MISTAKES}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <Text style={{ color: theme.colors.text, fontSize: compactLayout ? 24 : 26, fontWeight: '900' }} numberOfLines={1}>
+                ⏱ {msToClock(elapsedMs)}
+              </Text>
+              <Text style={{ color: mistakes >= 4 ? theme.colors.danger : theme.colors.text, fontSize: compactLayout ? 22 : 24, fontWeight: '900' }} numberOfLines={1}>
+                ❌ {mistakes}/{MAX_MISTAKES}
+              </Text>
             </View>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 4, fontSize: compactLayout ? 12 : 14 }} numberOfLines={1}>
-              Tiempo: {msToClock(elapsedMs)} {isDaily ? '· Daily' : ''}
-            </Text>
             {gameOver ? <Text style={{ color: theme.colors.danger, marginTop: 2, fontSize: 12 }} numberOfLines={2}>Entrada bloqueada por límite de fallos.</Text> : null}
           </Card>
           <View style={{ marginTop: 8 }}>
@@ -703,17 +763,38 @@ export default function SudokuScreen({ route, navigation }: Props) {
           </Card>
 
           <View style={{ marginTop: controlsGap, gap: 6 }}>
-            <NeuroCoinActionButton
-              label="Recuperar fallo"
-              icon="🩹"
-              cost={NEURO_COIN_COSTS.sudokuRecoverMistake}
-              usesLeft={MAX_RECOVER_MISTAKE_USES - recoverMistakeUses}
-              disabled={
-                gameOver || didWin || mistakes <= 0 || recoverMistakeUses >= MAX_RECOVER_MISTAKE_USES || !!dailyBlockedReason
-              }
-              onPress={handleRecoverMistake}
-              tone="green"
-            />
+            <HelpActionsGrid>
+              <NeuroCoinActionButton
+                label="Recuperar fallo"
+                icon="🩹"
+                cost={NEURO_COIN_COSTS.sudokuRecoverMistake}
+                usesLeft={MAX_RECOVER_MISTAKE_USES - recoverMistakeUses}
+                disabled={
+                  gameOver || didWin || mistakes <= 0 || recoverMistakeUses >= MAX_RECOVER_MISTAKE_USES || !!dailyBlockedReason
+                }
+                onPress={handleRecoverMistake}
+              />
+              <NeuroCoinActionButton
+                label="Rellenar celda"
+                icon="✍️"
+                cost={NEURO_COIN_COSTS.sudokuFillSelectedCell}
+                usesLeft={MAX_FILL_CELL_USES - fillCellUses}
+                disabled={
+                  gameOver || didWin || fillCellUses >= MAX_FILL_CELL_USES || !!dailyBlockedReason
+                }
+                onPress={handleFillSelectedCell}
+              />
+              <NeuroCoinActionButton
+                label="Pista aleatoria"
+                icon="💡"
+                cost={NEURO_COIN_COSTS.sudokuRandomHint}
+                usesLeft={MAX_RANDOM_HINT_USES - randomHintUses}
+                disabled={
+                  gameOver || didWin || randomHintUses >= MAX_RANDOM_HINT_USES || !!dailyBlockedReason
+                }
+                onPress={handleRandomHint}
+              />
+            </HelpActionsGrid>
             {economyFeedback ? (
               <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text>
             ) : null}

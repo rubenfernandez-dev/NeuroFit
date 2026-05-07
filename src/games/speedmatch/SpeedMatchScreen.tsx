@@ -22,10 +22,12 @@ import { navigateToNextChallenge } from '../../shared/session/challengeNavigatio
 import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'SpeedMatch'>;
 
@@ -53,29 +55,35 @@ function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
   return Math.max(1, Math.floor(Date.now() % 2_147_483_647));
 }
 
-function pickInitialSymbol(pool: string[], sessionSeed: number, offset: number): string {
+function buildStimulus(pool: string[], count: number, sessionSeed: number, offset: number): string {
   const rng = createSeededRng(sessionSeed + offset * 41 + 13);
-  return pickOne(pool, rng);
+  return Array.from({ length: Math.max(2, count) }, () => pickOne(pool, rng)).join('');
 }
 
-function nextSymbolFrom(
-  previousSymbol: string,
+function nextStimulusFrom(
+  previousStimulus: string,
   pool: string[],
   sessionSeed: number,
   round: number,
   matchProbability: number,
+  count: number,
 ): string {
   const rng = createSeededRng(sessionSeed + round * 101 + 17);
   const shouldMatch = rng() < matchProbability;
-  if (shouldMatch) return previousSymbol;
+  if (shouldMatch) return previousStimulus;
 
-  const alternatives = pool.filter((symbol) => symbol !== previousSymbol);
-  return pickOne(alternatives.length > 0 ? alternatives : pool, rng);
+  let next = buildStimulus(pool, count, sessionSeed, round * 3 + 7);
+  let safeGuard = 0;
+  while (next === previousStimulus && safeGuard < 5) {
+    next = buildStimulus(pool, count, sessionSeed, round * 3 + 17 + safeGuard);
+    safeGuard += 1;
+  }
+  return next;
 }
 
-function createSession(symbolPool: string[], config: ReturnType<typeof getSpeedMatchConfig>, sessionSeed: number) {
-  const previousSymbol = pickInitialSymbol(symbolPool, sessionSeed, 0);
-  const currentSymbol = nextSymbolFrom(previousSymbol, symbolPool, sessionSeed, 1, config.matchProbability);
+function createSession(symbolPool: string[], config: ReturnType<typeof getSpeedMatchConfig>, sessionSeed: number, symbolCount: number) {
+  const previousSymbol = buildStimulus(symbolPool, symbolCount, sessionSeed, 0);
+  const currentSymbol = nextStimulusFrom(previousSymbol, symbolPool, sessionSeed, 1, config.matchProbability, symbolCount);
 
   return {
     previousSymbol,
@@ -93,11 +101,12 @@ function createSession(symbolPool: string[], config: ReturnType<typeof getSpeedM
 
 export default function SpeedMatchScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
   const config = getSpeedMatchConfig(difficulty);
-  const symbolPool = useMemo(() => SYMBOL_LIBRARY.slice(0, config.symbolCount), [config.symbolCount]);
+  const symbolPool = useMemo(() => SYMBOL_LIBRARY.slice(0, 6), []);
 
   const [previousSymbol, setPreviousSymbol] = useState('');
   const [currentSymbol, setCurrentSymbol] = useState('');
@@ -116,10 +125,14 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   const [inputLocked, setInputLocked] = useState(false);
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
-  const [extraTimeUses, setExtraTimeUses] = useState(0);
+  const [activeSymbolCount, setActiveSymbolCount] = useState(config.symbolCount);
+  const [extraTime5Uses, setExtraTime5Uses] = useState(0);
+  const [extraTime10Uses, setExtraTime10Uses] = useState(0);
+  const [removeSymbolUses, setRemoveSymbolUses] = useState(0);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
-  const MAX_EXTRA_TIME_USES = 2;
+  const MAX_EXTRA_TIME_USES = 3;
+  const MAX_REMOVE_SYMBOL_USES = 1;
 
   const clearAdvanceTimer = () => {
     if (advanceTimerRef.current) {
@@ -178,6 +191,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
         setSessionSeed(saved.sessionSeed);
         setSessionStarted(Boolean(saved.sessionStarted));
         setDidFinish(Boolean(saved.didFinish));
+        setActiveSymbolCount(Math.max(2, Array.from(saved.currentSymbol).length));
 
         if (!saved.sessionStarted) {
           await trackSessionStart({ gameId: 'speedmatch', mode: isDaily ? 'daily' : 'normal' });
@@ -187,7 +201,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       }
 
       const nextSeed = getSessionSeed(isDaily, dailySeed);
-      const base = createSession(symbolPool, config, nextSeed);
+      const base = createSession(symbolPool, config, nextSeed, config.symbolCount);
 
       if (!mounted) return;
       setPreviousSymbol(base.previousSymbol);
@@ -203,7 +217,10 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       setResultVisible(false);
       setResultSummary(null);
       setInputLocked(false);
-      setExtraTimeUses(0);
+      setActiveSymbolCount(config.symbolCount);
+      setExtraTime5Uses(0);
+      setExtraTime10Uses(0);
+      setRemoveSymbolUses(0);
       clearEconomyFeedback();
       await trackSessionStart({ gameId: 'speedmatch', mode: isDaily ? 'daily' : 'normal' });
     };
@@ -379,12 +396,13 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     const nextMistakes = wasCorrect ? mistakes : mistakes + 1;
     const nextScore = wasCorrect ? score + 10 : Math.max(0, score - 5);
     const nextRound = round + 1;
-    const nextSymbol = nextSymbolFrom(
+    const nextSymbol = nextStimulusFrom(
       currentSymbol,
       symbolPool,
       sessionSeed,
       nextRound,
       config.matchProbability,
+      activeSymbolCount,
     );
 
     setCorrect(nextCorrect);
@@ -405,7 +423,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     if (isDaily) return;
     clearAdvanceTimer();
     const nextSeed = getSessionSeed(false);
-    const base = createSession(symbolPool, config, nextSeed);
+    const base = createSession(symbolPool, config, nextSeed, config.symbolCount);
 
     setPreviousSymbol(base.previousSymbol);
     setCurrentSymbol(base.currentSymbol);
@@ -419,32 +437,69 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
     setResultVisible(false);
     setResultSummary(null);
     setInputLocked(false);
-    setExtraTimeUses(0);
+    setActiveSymbolCount(config.symbolCount);
+    setExtraTime5Uses(0);
+    setExtraTime10Uses(0);
+    setRemoveSymbolUses(0);
     clearEconomyFeedback();
     setSessionStarted(true);
     await trackSessionStart({ gameId: 'speedmatch', mode: 'normal' });
   };
 
-  const handleBuyExtraTime = async () => {
-    if (dailyBlockedReason || didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES) return;
+  const handleBuyExtraTime5 = async () => {
+    if (dailyBlockedReason || didFinish || extraTime5Uses >= MAX_EXTRA_TIME_USES) return;
 
-    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.speedMatchExtraTime, 'speed_match_extra_time');
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.speedMatchExtraTime5, 'speed_match_extra_time');
     if (!spendResult.success) {
       showNeuroCoinError('No tienes suficientes NeuroCoins');
       return;
     }
 
-    setTimeLeft((prev) => prev + 2);
+    setTimeLeft((prev) => prev + 5);
     setNeuroCoins(spendResult.newBalance);
-    setExtraTimeUses((prev) => prev + 1);
-    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.speedMatchExtraTime);
+    setExtraTime5Uses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.speedMatchExtraTime5);
+  };
+
+  const handleBuyExtraTime10 = async () => {
+    if (dailyBlockedReason || didFinish || extraTime10Uses >= MAX_EXTRA_TIME_USES) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.speedMatchExtraTime10, 'speed_match_extra_time');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setTimeLeft((prev) => prev + 10);
+    setNeuroCoins(spendResult.newBalance);
+    setExtraTime10Uses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.speedMatchExtraTime10);
+  };
+
+  const handleRemoveSymbol = async () => {
+    if (dailyBlockedReason || didFinish || removeSymbolUses >= MAX_REMOVE_SYMBOL_USES) return;
+    if (activeSymbolCount <= 2) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.speedMatchRemoveSymbol, 'speed_match_remove_symbol');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    const nextCount = Math.max(2, activeSymbolCount - 1);
+    setActiveSymbolCount(nextCount);
+    setPreviousSymbol((prev) => Array.from(prev).slice(0, nextCount).join(''));
+    setCurrentSymbol((prev) => Array.from(prev).slice(0, nextCount).join(''));
+    setNeuroCoins(spendResult.newBalance);
+    setRemoveSymbolUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.speedMatchRemoveSymbol);
   };
 
   const accuracyPct = Math.round((correct / Math.max(1, correct + mistakes)) * 100);
 
   return (
     <>
-      <Screen>
+      <Screen scroll={false}>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card
           variant="cyan"
@@ -479,14 +534,32 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
         {!dailyBlockedReason ? (
           <Card style={{ padding: 10 }}>
-            <NeuroCoinActionButton
-              label="+2s"
-              icon="⏱"
-              cost={NEURO_COIN_COSTS.speedMatchExtraTime}
-              usesLeft={MAX_EXTRA_TIME_USES - extraTimeUses}
-              disabled={didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES}
-              onPress={handleBuyExtraTime}
-            />
+            <HelpActionsGrid>
+              <NeuroCoinActionButton
+                label="+5s"
+                icon="⏱"
+                cost={NEURO_COIN_COSTS.speedMatchExtraTime5}
+                usesLeft={MAX_EXTRA_TIME_USES - extraTime5Uses}
+                disabled={didFinish || extraTime5Uses >= MAX_EXTRA_TIME_USES}
+                onPress={handleBuyExtraTime5}
+              />
+              <NeuroCoinActionButton
+                label="+10s"
+                icon="⏳"
+                cost={NEURO_COIN_COSTS.speedMatchExtraTime10}
+                usesLeft={MAX_EXTRA_TIME_USES - extraTime10Uses}
+                disabled={didFinish || extraTime10Uses >= MAX_EXTRA_TIME_USES}
+                onPress={handleBuyExtraTime10}
+              />
+              <NeuroCoinActionButton
+                label="-1 simbolo"
+                icon="➖"
+                cost={NEURO_COIN_COSTS.speedMatchRemoveSymbol}
+                usesLeft={MAX_REMOVE_SYMBOL_USES - removeSymbolUses}
+                disabled={didFinish || removeSymbolUses >= MAX_REMOVE_SYMBOL_USES || activeSymbolCount <= 2}
+                onPress={handleRemoveSymbol}
+              />
+            </HelpActionsGrid>
             {economyFeedback ? <Text style={{ color: theme.colors.textMuted, marginTop: 6, fontSize: 12 }}>{economyFeedback}</Text> : null}
           </Card>
         ) : null}
@@ -503,20 +576,36 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
         {!dailyBlockedReason ? (
           <Card variant="primary" style={{ alignItems: 'center' }}>
             <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Anterior</Text>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 40, marginTop: 6 }}>{previousSymbol}</Text>
+            <Text style={{ color: theme.colors.textMuted, fontSize: 28, marginTop: 6 }}>{Array.from(previousSymbol).join(' ')}</Text>
             <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 14 }]}>Actual</Text>
-            <Text style={{ color: theme.colors.text, fontSize: 74, marginTop: 4 }}>{currentSymbol}</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 44, marginTop: 4, textAlign: 'center' }}>{Array.from(currentSymbol).join(' ')}</Text>
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 8 }]}>¿Coincide con el símbolo anterior?</Text>
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 4 }]}>Ritmo: {Math.round(1000 / config.stimulusIntervalMs * 10) / 10} est./s</Text>
 
             <View style={{ marginTop: 14, width: '100%', flexDirection: 'row', gap: 10 }}>
-              <Button title="Match" onPress={() => answer(true)} style={{ flex: 1 }} disabled={inputLocked} />
-              <Button title="No Match" variant="secondary" onPress={() => answer(false)} style={{ flex: 1 }} disabled={inputLocked} />
+              <Button
+                title="Match"
+                onPress={() => answer(true)}
+                style={{ flex: 1, minHeight: 50, backgroundColor: '#16A34A', borderColor: '#15803D' }}
+                disabled={inputLocked}
+              />
+              <Button
+                title="No Match"
+                onPress={() => answer(false)}
+                style={{ flex: 1, minHeight: 50, backgroundColor: '#DC2626', borderColor: '#B91C1C' }}
+                disabled={inputLocked}
+              />
             </View>
           </Card>
         ) : null}
 
-        <Button title="Reiniciar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
+        <Button
+          title="Reiniciar"
+          variant="primary"
+          onPress={restart}
+          disabled={isDaily || !!dailyBlockedReason}
+          style={{ minHeight: 50, backgroundColor: '#2563EB', borderColor: '#1D4ED8' }}
+        />
       </Screen>
 
       <GameResultModal

@@ -22,7 +22,9 @@ import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MentalMath'>;
 
@@ -42,6 +44,7 @@ type ResultSummary = {
 
 export default function MentalMathScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
@@ -61,12 +64,13 @@ export default function MentalMathScreen({ route, navigation }: Props) {
   const [dailyBlockedReason, setDailyBlockedReason] = useState<string | null>(null);
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
-  const [extraTimeUses, setExtraTimeUses] = useState(0);
+  const [extraTime5Uses, setExtraTime5Uses] = useState(0);
+  const [extraTime10Uses, setExtraTime10Uses] = useState(0);
   const [skipUses, setSkipUses] = useState(0);
   const [economyFeedback, setEconomyFeedback] = useState<string | null>(null);
 
-  const MAX_EXTRA_TIME_USES = 2;
-  const MAX_SKIP_USES = 2;
+  const MAX_EXTRA_TIME_USES = 3;
+  const MAX_SKIP_USES = 3;
 
   useEffect(() => {
     let mounted = true;
@@ -342,7 +346,8 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     setResultVisible(false);
     setResultSummary(null);
     setSessionStarted(true);
-    setExtraTimeUses(0);
+    setExtraTime5Uses(0);
+    setExtraTime10Uses(0);
     setSkipUses(0);
     setEconomyFeedback(null);
     trackSessionStart({ gameId: 'mentalmath', mode: isDaily ? 'daily' : 'normal' });
@@ -361,15 +366,26 @@ export default function MentalMathScreen({ route, navigation }: Props) {
     return true;
   };
 
-  const handleBuyExtraTime = async () => {
+  const handleBuyExtraTime5 = async () => {
     if (didFinish || dailyBlockedReason) return;
-    if (extraTimeUses >= MAX_EXTRA_TIME_USES) return;
+    if (extraTime5Uses >= MAX_EXTRA_TIME_USES) return;
 
-    const spent = await spendForAction(NEURO_COIN_COSTS.mentalMathExtraTime, 'mental_math_extra_time');
+    const spent = await spendForAction(NEURO_COIN_COSTS.mentalMathExtraTime5, 'mental_math_extra_time');
     if (!spent) return;
 
-    setTimeLeft((prev) => Math.min(sessionConfig.maxTimeSec, prev + 3));
-    setExtraTimeUses((prev) => prev + 1);
+    setTimeLeft((prev) => Math.min(sessionConfig.maxTimeSec, prev + 5));
+    setExtraTime5Uses((prev) => prev + 1);
+  };
+
+  const handleBuyExtraTime10 = async () => {
+    if (didFinish || dailyBlockedReason) return;
+    if (extraTime10Uses >= MAX_EXTRA_TIME_USES) return;
+
+    const spent = await spendForAction(NEURO_COIN_COSTS.mentalMathExtraTime10, 'mental_math_extra_time');
+    if (!spent) return;
+
+    setTimeLeft((prev) => Math.min(sessionConfig.maxTimeSec, prev + 10));
+    setExtraTime10Uses((prev) => prev + 1);
   };
 
   const handleSkipQuestion = async () => {
@@ -386,7 +402,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
   return (
     <>
-    <Screen>
+    <Screen scroll={false}>
       <PlayerEconomyBar xp={xpTotal} neuroCoins={neuroCoins} compact />
 
       <Card
@@ -407,7 +423,10 @@ export default function MentalMathScreen({ route, navigation }: Props) {
           <View style={{ flex: 1, minWidth: 0 }}>
             {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
             <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 10 }}>Respuesta: {inputValue || '...'}</Text>
+            <Text style={{ color: theme.colors.textMuted, marginTop: 8, fontSize: 13 }}>Respuesta</Text>
+            <Text style={{ color: theme.colors.text, marginTop: 2, fontWeight: '900', fontSize: 36, letterSpacing: 0.5 }}>
+              {inputValue || '...'}
+            </Text>
             <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
               +{sessionConfig.bonusOnCorrectSec}s por acierto · Máx. fallos: {sessionConfig.maxErrors}
             </Text>
@@ -425,42 +444,42 @@ export default function MentalMathScreen({ route, navigation }: Props) {
               justifyContent: 'space-between',
             }}
           >
-            <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 30, lineHeight: 34, textAlign: 'center' }}>⏱ {timeLeft}s</Text>
-            <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 30, lineHeight: 34, textAlign: 'center', marginTop: 2 }}>✅ {correct}</Text>
-            <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 30, lineHeight: 34, textAlign: 'center' }}>❌ {wrong}</Text>
+            <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>⏱ {timeLeft}s</Text>
+            <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center', marginTop: 2 }}>✅ {correct}</Text>
+            <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>❌ {wrong}</Text>
           </View>
         </View>
       </Card>
 
       {!dailyBlockedReason ? (
         <View style={{ gap: 6 }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <NeuroCoinActionButton
-                label="+3s"
-                icon="⏱"
-                cost={NEURO_COIN_COSTS.mentalMathExtraTime}
-                usesLeft={MAX_EXTRA_TIME_USES - extraTimeUses}
-                disabled={didFinish || extraTimeUses >= MAX_EXTRA_TIME_USES}
-                onPress={handleBuyExtraTime}
-                tone="blue"
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <NeuroCoinActionButton
-                label="Saltar"
-                icon="⏭"
-                cost={NEURO_COIN_COSTS.mentalMathSkipQuestion}
-                usesLeft={MAX_SKIP_USES - skipUses}
-                disabled={didFinish || skipUses >= MAX_SKIP_USES}
-                onPress={handleSkipQuestion}
-                tone="green"
-              />
-            </View>
-          </View>
-          {economyFeedback ? (
-            <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text>
-          ) : null}
+          <HelpActionsGrid>
+            <NeuroCoinActionButton
+              label="+5s"
+              icon="⏱"
+              cost={NEURO_COIN_COSTS.mentalMathExtraTime5}
+              usesLeft={MAX_EXTRA_TIME_USES - extraTime5Uses}
+              disabled={didFinish || extraTime5Uses >= MAX_EXTRA_TIME_USES}
+              onPress={handleBuyExtraTime5}
+            />
+            <NeuroCoinActionButton
+              label="+10s"
+              icon="⏳"
+              cost={NEURO_COIN_COSTS.mentalMathExtraTime10}
+              usesLeft={MAX_EXTRA_TIME_USES - extraTime10Uses}
+              disabled={didFinish || extraTime10Uses >= MAX_EXTRA_TIME_USES}
+              onPress={handleBuyExtraTime10}
+            />
+            <NeuroCoinActionButton
+              label="Saltar"
+              icon="⏭"
+              cost={NEURO_COIN_COSTS.mentalMathSkipQuestion}
+              usesLeft={MAX_SKIP_USES - skipUses}
+              disabled={didFinish || skipUses >= MAX_SKIP_USES}
+              onPress={handleSkipQuestion}
+            />
+          </HelpActionsGrid>
+          {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
         </View>
       ) : null}
 

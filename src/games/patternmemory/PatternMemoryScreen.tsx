@@ -34,10 +34,12 @@ import { resetSessionStreak } from '../../shared/session/sessionStreak';
 import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PatternMemory'>;
 
@@ -60,7 +62,14 @@ type ResultSummary = {
   rewardChest?: RewardChestGrant;
 };
 
-const TILE_IDS: TileId[] = [0, 1, 2, 3];
+const TILE_COUNT_BY_DIFFICULTY: Record<Difficulty, number> = {
+  principiante: 2,
+  avanzado: 3,
+  experto: 4,
+  maestro: 5,
+  gran_maestro: 6,
+};
+
 const CORRECT_TAP_BONUS_SEC = 8;
 const MAX_TIME_BONUS_CAP_SEC = 120;
 
@@ -73,12 +82,13 @@ function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
 
 export default function PatternMemoryScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
   const config = useMemo(() => getPatternMemoryConfig(difficulty), [difficulty]);
 
-  const tileAnimRefs = useRef<Animated.Value[]>([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]);
+  const tileAnimRefs = useRef<Animated.Value[]>([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0), new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]);
   const playbackTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const mountedRef = useRef(true);
 
@@ -105,11 +115,14 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
   const [hintUses, setHintUses] = useState(0);
+  const [removeButtonUses, setRemoveButtonUses] = useState(0);
+  const [activeTileCount, setActiveTileCount] = useState(() => TILE_COUNT_BY_DIFFICULTY[difficulty]);
   const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
-  const MAX_HINT_USES = 2;
+  const MAX_HINT_USES = 3;
+  const MAX_REMOVE_BUTTON_USES = 1;
 
   const tileBaseColors = useMemo(
-    () => [theme.colors.primary, theme.colors.cyan, theme.colors.pink, theme.colors.orange],
+    () => [theme.colors.primary, theme.colors.cyan, theme.colors.pink, theme.colors.orange, '#8B5CF6', '#10B981'],
     [theme.colors.cyan, theme.colors.orange, theme.colors.pink, theme.colors.primary],
   );
 
@@ -173,8 +186,9 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
   const prepareFreshSession = useCallback(
     (nextSeed: number) => {
+      const tileCount = TILE_COUNT_BY_DIFFICULTY[difficulty];
       const rng = createRoundRng(nextSeed);
-      const initialSequence = createInitialSequence(rng);
+      const initialSequence = createInitialSequence(rng, tileCount);
       setSessionSeed(nextSeed);
       setStartedAtISO(nowISO());
       setSequence(initialSequence);
@@ -195,9 +209,11 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       setResultVisible(false);
       setResultSummary(null);
       setHintUses(0);
+      setRemoveButtonUses(0);
+      setActiveTileCount(tileCount);
       clearEconomyFeedback();
     },
-    [clearEconomyFeedback, config.totalSeconds],
+    [clearEconomyFeedback, config.totalSeconds, difficulty],
   );
 
   useEffect(() => {
@@ -567,7 +583,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
         }
 
         const rng = createRoundRng(sessionSeed + completedRound * 101);
-        const nextSequence = appendSequenceStep(sequence, rng);
+        const nextSequence = appendSequenceStep(sequence, rng, activeTileCount);
         setSequence(nextSequence);
         setRound((prev) => prev + 1);
         setInputIndex(0);
@@ -585,6 +601,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
       finishSession('failed');
     },
     [
+      activeTileCount,
       config.maxRound,
       dailyBlockedReason,
       didFinish,
@@ -629,6 +646,39 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
     setPromptAtMs(Date.now());
   }, [dailyBlockedReason, didFinish, finishing, flashTile, hintUses, inputIndex, phase, sequence, showNeuroCoinError, showNeuroCoinSpendFeedback]);
 
+  const handleRepeatSequence = useCallback(async () => {
+    if (dailyBlockedReason || didFinish || finishing || phase === 'finished') return;
+    if (hintUses >= MAX_HINT_USES) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.patternMemoryRepeatSequence, 'pattern_memory_repeat_sequence');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setNeuroCoins(spendResult.newBalance);
+    setHintUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.patternMemoryRepeatSequence);
+    playSequence(sequence);
+  }, [dailyBlockedReason, didFinish, finishing, hintUses, phase, playSequence, sequence, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+
+  const handleRemoveButton = useCallback(async () => {
+    if (dailyBlockedReason || didFinish || finishing) return;
+    if (removeButtonUses >= MAX_REMOVE_BUTTON_USES) return;
+    if (activeTileCount <= 2) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.patternMemoryRemoveButton, 'pattern_memory_remove_button');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setNeuroCoins(spendResult.newBalance);
+    setRemoveButtonUses((prev) => prev + 1);
+    setActiveTileCount((prev) => prev - 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.patternMemoryRemoveButton);
+  }, [activeTileCount, dailyBlockedReason, didFinish, finishing, removeButtonUses, showNeuroCoinError, showNeuroCoinSpendFeedback]);
+
   const exitGame = useCallback(() => {
     clearPlaybackQueue();
     if (sessionStarted && !didFinish) {
@@ -642,7 +692,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
 
   return (
     <>
-      <Screen>
+      <Screen scroll={false}>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card
           variant="primary"
@@ -668,25 +718,38 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
             Ronda: {round}/{config.maxRound}
           </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Mejor secuencia: {maxSequence} · Precisión: {accuracy}% · RT medio: {reactionTimeAvg} ms
-          </Text>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Bono: +{CORRECT_TAP_BONUS_SEC}s por acierto
+            Precisión: {accuracy}% · RT medio: {reactionTimeAvg} ms
           </Text>
         </Card>
 
         {!dailyBlockedReason ? (
           <View style={{ gap: 6 }}>
-            <NeuroCoinActionButton
-              label="Siguiente paso"
-              icon="✨"
-              cost={NEURO_COIN_COSTS.patternMemoryRepeatSequence}
-              usesLeft={MAX_HINT_USES - hintUses}
-              disabled={didFinish || finishing || phase !== 'input' || sequence.length === 0 || hintUses >= MAX_HINT_USES}
-              onPress={handleShowNextStep}
-              highlighted
-              tone="green"
-            />
+            <HelpActionsGrid>
+              <NeuroCoinActionButton
+                label="Repetir secuencia"
+                icon="🔁"
+                cost={NEURO_COIN_COSTS.patternMemoryRepeatSequence}
+                usesLeft={MAX_HINT_USES - hintUses}
+                disabled={didFinish || finishing || phase === 'finished' || hintUses >= MAX_HINT_USES}
+                onPress={handleRepeatSequence}
+              />
+              <NeuroCoinActionButton
+                label="Pista siguiente"
+                icon="✨"
+                cost={NEURO_COIN_COSTS.patternMemoryRepeatSequence}
+                usesLeft={MAX_HINT_USES - hintUses}
+                disabled={didFinish || finishing || phase !== 'input' || sequence.length === 0 || hintUses >= MAX_HINT_USES}
+                onPress={handleShowNextStep}
+              />
+              <NeuroCoinActionButton
+                label="Quitar botón"
+                icon="🗑️"
+                cost={NEURO_COIN_COSTS.patternMemoryRemoveButton}
+                usesLeft={MAX_REMOVE_BUTTON_USES - removeButtonUses}
+                disabled={didFinish || finishing || removeButtonUses >= MAX_REMOVE_BUTTON_USES || activeTileCount <= 2}
+                onPress={handleRemoveButton}
+              />
+            </HelpActionsGrid>
             {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
           </View>
         ) : null}
@@ -708,7 +771,7 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
             </Text>
 
             <View style={{ marginTop: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
-              {TILE_IDS.map((tileId) => {
+              {Array.from({ length: activeTileCount }, (_, i) => i as TileId).map((tileId) => {
                 const pulseValue = tileAnimRefs.current[tileId];
                 const scale = pulseValue.interpolate({
                   inputRange: [0, 1],
@@ -755,10 +818,9 @@ export default function PatternMemoryScreen({ route, navigation }: Props) {
             disabled={!!dailyBlockedReason || didFinish || phase === 'showing'}
             style={{ flex: 1 }}
           />
-          <Button title="Salir" variant="secondary" onPress={exitGame} style={{ flex: 1 }} />
+          <Button title="Salir" variant="primary" onPress={exitGame} style={{ flex: 1, backgroundColor: theme.colors.red, borderColor: theme.colors.red }} />
+          <Button title="Reiniciar" variant="secondary" onPress={restart} disabled={isDaily || !!dailyBlockedReason} style={{ flex: 1 }} />
         </View>
-
-        <Button title="Reintentar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} />
       </Screen>
 
       <GameResultModal

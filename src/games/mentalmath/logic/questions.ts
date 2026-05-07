@@ -52,6 +52,17 @@ function makeExactDivision(rng: () => number, divisorMin: number, divisorMax: nu
   return { text: `${dividend} ÷ ${divisor}`, answer: result };
 }
 
+function makeExactSquareRoot(rng: () => number, min: number, max: number): Question {
+  const base = randomInt(min, max, rng);
+  return { text: `√${base * base}`, answer: base };
+}
+
+function makePowerQuestion(rng: () => number, baseMin: number, baseMax: number, expMin: number, expMax: number): Question {
+  const base = randomInt(baseMin, baseMax, rng);
+  const exp = randomInt(expMin, expMax, rng);
+  return { text: `${base}^${exp}`, answer: Math.pow(base, exp) };
+}
+
 function makePrincipiante(rng: () => number): Question {
   // 1 paso, numeros chicos, sin negativos.
   return makeAddSub(rng, 1, 20, false);
@@ -73,61 +84,73 @@ function makeExperto(rng: () => number): Question {
 }
 
 function makeMaestro(rng: () => number): Question {
-  // Dos pasos claros y cortos, con parentesis para evitar ambiguedad visual.
-  const pattern = randomInt(0, 2, rng);
+  // Maestro incluye raices cuadradas y potencias basicas.
+  const pattern = randomInt(0, 4, rng);
 
   if (pattern === 0) {
-    const a = randomInt(4, 24, rng);
-    const b = randomInt(4, 24, rng);
-    const c = randomInt(2, 12, rng);
-    const sum = a + b;
-    return { text: `(${a} + ${b}) × ${c}`, answer: sum * c };
+    return makeExactSquareRoot(rng, 4, 16);
   }
 
   if (pattern === 1) {
-    const divisor = randomInt(2, 18, rng);
+    return makePowerQuestion(rng, 2, 5, 2, 3);
+  }
+
+  if (pattern === 2) {
+    const root = makeExactSquareRoot(rng, 5, 15);
+    const extra = randomInt(3, 20, rng);
+    return { text: `${root.text} + ${extra}`, answer: root.answer + extra };
+  }
+
+  if (pattern === 3) {
+    const divisor = randomInt(2, 12, rng);
     const quotient = randomInt(3, 20, rng);
-    const extra = randomInt(4, 25, rng);
+    const extra = randomInt(4, 20, rng);
     const dividend = divisor * quotient;
     return { text: `${dividend} ÷ ${divisor} + ${extra}`, answer: quotient + extra };
   }
 
-  const a = randomInt(20, 90, rng);
-  const b = randomInt(3, 20, rng);
-  const c = randomInt(2, 12, rng);
+  const a = randomInt(18, 70, rng);
+  const b = randomInt(3, 14, rng);
+  const c = randomInt(2, 10, rng);
   return { text: `${a} - ${b} × ${c}`, answer: a - b * c };
 }
 
 function makeGranMaestro(rng: () => number): Question {
-  // Dos o tres pasos, mayor mezcla y rango que maestro.
-  const pattern = randomInt(0, 3, rng);
+  // Gran maestro incluye raices y potencias mas avanzadas.
+  const pattern = randomInt(0, 5, rng);
 
   if (pattern === 0) {
-    const a = randomInt(8, 40, rng);
-    const b = randomInt(8, 40, rng);
-    const c = randomInt(3, 15, rng);
-    const d = randomInt(10, 60, rng);
-    return { text: `(${a} + ${b}) × ${c} - ${d}`, answer: (a + b) * c - d };
+    return makeExactSquareRoot(rng, 7, 24);
   }
 
   if (pattern === 1) {
+    return makePowerQuestion(rng, 2, 6, 2, 4);
+  }
+
+  if (pattern === 2) {
+    const power = makePowerQuestion(rng, 2, 5, 2, 3);
+    const root = makeExactSquareRoot(rng, 6, 20);
+    return { text: `${power.text} + ${root.text}`, answer: power.answer + root.answer };
+  }
+
+  if (pattern === 3) {
+    const a = randomInt(8, 30, rng);
+    const b = randomInt(8, 30, rng);
+    const c = randomInt(3, 14, rng);
+    const d = randomInt(8, 45, rng);
+    return { text: `(${a} + ${b}) × ${c} - ${d}`, answer: (a + b) * c - d };
+  }
+
+  if (pattern === 4) {
     const divisor = randomInt(3, 18, rng);
-    const quotient = randomInt(6, 30, rng);
+    const quotient = randomInt(6, 28, rng);
     const m1 = randomInt(4, 14, rng);
     const m2 = randomInt(3, 12, rng);
     const dividend = divisor * quotient;
     return { text: `${dividend} ÷ ${divisor} + ${m1} × ${m2}`, answer: quotient + m1 * m2 };
   }
 
-  if (pattern === 2) {
-    const a = randomInt(5, 20, rng);
-    const b = randomInt(5, 20, rng);
-    const c = randomInt(5, 20, rng);
-    const d = randomInt(2, 12, rng);
-    return { text: `(${a} + ${b} + ${c}) × ${d}`, answer: (a + b + c) * d };
-  }
-
-  const a = randomInt(20, 80, rng);
+  const a = randomInt(18, 80, rng);
   const b = randomInt(4, 20, rng);
   const c = randomInt(4, 20, rng);
   const d = randomInt(3, 16, rng);

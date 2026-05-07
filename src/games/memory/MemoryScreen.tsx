@@ -22,10 +22,12 @@ import { navigateToNextChallenge } from '../../shared/session/challengeNavigatio
 import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
 import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Memory'>;
 
@@ -46,6 +48,7 @@ type ResultSummary = {
 
 export default function MemoryScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'principiante') as Difficulty;
   const { isDaily, dailyDateISO, dailySeed, stageIndex } = gameRoute;
@@ -71,11 +74,15 @@ export default function MemoryScreen({ route, navigation }: Props) {
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
   const [revealUses, setRevealUses] = useState(0);
+  const [revealHalfUses, setRevealHalfUses] = useState(0);
+  const [revealPairUses, setRevealPairUses] = useState(0);
   const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mismatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { message: economyFeedback, showNeuroCoinError, showNeuroCoinSpendFeedback, clearFeedback: clearEconomyFeedback } = useNeuroCoinFeedback();
-  const MAX_REVEAL_USES = 1;
+  const MAX_REVEAL_USES = 3;
+  const MAX_REVEAL_HALF_USES = 3;
+  const MAX_REVEAL_PAIR_USES = 3;
 
   const memoryConfig = useMemo(() => getMemoryDifficultyConfig(difficulty), [difficulty]);
   const { cols } = memoryConfig;
@@ -188,6 +195,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
       setSessionStarted(true);
       setRevealAllActive(false);
       setRevealUses(0);
+      setRevealHalfUses(0);
+      setRevealPairUses(0);
       clearEconomyFeedback();
       startPreviewWindow();
       await trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
@@ -376,6 +385,8 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setLockInput(false);
     setRevealAllActive(false);
     setRevealUses(0);
+    setRevealHalfUses(0);
+    setRevealPairUses(0);
     clearEconomyFeedback();
     startPreviewWindow();
     trackSessionStart({ gameId: 'memory', mode: isDaily ? 'daily' : 'normal' });
@@ -385,7 +396,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
     if (dailyBlockedReason || didFinish || revealUses >= MAX_REVEAL_USES) return;
     if (previewActive || lockInput || flipped.length >= 2) return;
 
-    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.memoryRevealCards, 'memory_reveal_cards');
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.memoryRevealAll1s, 'memory_reveal_all_1s');
     if (!spendResult.success) {
       showNeuroCoinError('No tienes suficientes NeuroCoins');
       return;
@@ -396,17 +407,77 @@ export default function MemoryScreen({ route, navigation }: Props) {
     setRevealUses((prev) => prev + 1);
     setRevealAllActive(true);
     setLockInput(true);
-    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.memoryRevealCards);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.memoryRevealAll1s);
     revealTimerRef.current = setTimeout(() => {
       setRevealAllActive(false);
       setLockInput(false);
       revealTimerRef.current = null;
-    }, 1500);
+    }, 1000);
+  };
+
+  const handleRevealCardsHalf = async () => {
+    if (dailyBlockedReason || didFinish || revealHalfUses >= MAX_REVEAL_HALF_USES) return;
+    if (previewActive || lockInput || flipped.length >= 2) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.memoryRevealAllHalfSecond, 'memory_reveal_half_second');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    clearRevealTimer();
+    setNeuroCoins(spendResult.newBalance);
+    setRevealHalfUses((prev) => prev + 1);
+    setRevealAllActive(true);
+    setLockInput(true);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.memoryRevealAllHalfSecond);
+    revealTimerRef.current = setTimeout(() => {
+      setRevealAllActive(false);
+      setLockInput(false);
+      revealTimerRef.current = null;
+    }, 500);
+  };
+
+  const handleRevealPair = async () => {
+    if (dailyBlockedReason || didFinish || revealPairUses >= MAX_REVEAL_PAIR_USES) return;
+    if (previewActive || lockInput) return;
+
+    // Find a matching pair by pairId among unmatched, unflipped indices
+    const pairIndices = (() => {
+      const pairMap: Record<string, number[]> = {};
+      cards.forEach((card, idx) => {
+        if (!matched.includes(idx) && !flipped.includes(idx)) {
+          if (!pairMap[card.pairId]) pairMap[card.pairId] = [];
+          pairMap[card.pairId].push(idx);
+        }
+      });
+      const entry = Object.values(pairMap).find((idxs) => idxs.length >= 2);
+      return entry ? entry.slice(0, 2) : null;
+    })();
+
+    if (!pairIndices) return;
+
+    const spendResult = await spendNeuroCoins(NEURO_COIN_COSTS.memoryRevealOnePair, 'memory_reveal_one_pair');
+    if (!spendResult.success) {
+      showNeuroCoinError('No tienes suficientes NeuroCoins');
+      return;
+    }
+
+    setNeuroCoins(spendResult.newBalance);
+    setRevealPairUses((prev) => prev + 1);
+    showNeuroCoinSpendFeedback(NEURO_COIN_COSTS.memoryRevealOnePair);
+    setFlipped(pairIndices);
+    setLockInput(true);
+    revealTimerRef.current = setTimeout(() => {
+      setFlipped([]);
+      setLockInput(false);
+      revealTimerRef.current = null;
+    }, 1200);
   };
 
   return (
     <>
-    <Screen>
+    <Screen scroll={false}>
       <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
       <Card
         variant="cyan"
@@ -425,25 +496,42 @@ export default function MemoryScreen({ route, navigation }: Props) {
         <View style={{ marginTop: 8 }}>
           {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
         </View>
-        <Text style={{ color: theme.colors.textMuted, marginTop: 6 }}>
-          Tiempo: {msToClock(elapsedMs)} · Intentos: {attempts}
+        <Text style={{ color: theme.colors.text, marginTop: 6, fontSize: 24, fontWeight: '900' }}>
+          ⏱ {msToClock(elapsedMs)}
         </Text>
-        <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-          Puntos: {roundScore} · Racha: x{Math.max(1, currentStreak)} · Fallos: {mismatches}
+        <Text style={{ color: theme.colors.text, marginTop: 4, fontSize: 24, fontWeight: '900' }}>
+          ✔️ {matched.length / 2} · ❌ {mismatches}
         </Text>
       </Card>
 
       {!dailyBlockedReason ? (
         <View style={{ gap: 6 }}>
-          <NeuroCoinActionButton
-            label="Revelar"
-            icon="🃏"
-            cost={NEURO_COIN_COSTS.memoryRevealCards}
-            usesLeft={MAX_REVEAL_USES - revealUses}
-            disabled={didFinish || previewActive || lockInput || revealUses >= MAX_REVEAL_USES}
-            onPress={handleRevealCards}
-            tone="blue"
-          />
+          <HelpActionsGrid>
+            <NeuroCoinActionButton
+              label="Revelar 1s"
+              icon="🃏"
+              cost={NEURO_COIN_COSTS.memoryRevealAll1s}
+              usesLeft={MAX_REVEAL_USES - revealUses}
+              disabled={didFinish || previewActive || lockInput || revealUses >= MAX_REVEAL_USES}
+              onPress={handleRevealCards}
+            />
+            <NeuroCoinActionButton
+              label="Revelar 0.5s"
+              icon="⚡"
+              cost={NEURO_COIN_COSTS.memoryRevealAllHalfSecond}
+              usesLeft={MAX_REVEAL_HALF_USES - revealHalfUses}
+              disabled={didFinish || previewActive || lockInput || revealHalfUses >= MAX_REVEAL_HALF_USES}
+              onPress={handleRevealCardsHalf}
+            />
+            <NeuroCoinActionButton
+              label="Revelar par"
+              icon="✨"
+              cost={NEURO_COIN_COSTS.memoryRevealOnePair}
+              usesLeft={MAX_REVEAL_PAIR_USES - revealPairUses}
+              disabled={didFinish || previewActive || lockInput || revealPairUses >= MAX_REVEAL_PAIR_USES}
+              onPress={handleRevealPair}
+            />
+          </HelpActionsGrid>
           {economyFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{economyFeedback}</Text> : null}
         </View>
       ) : null}

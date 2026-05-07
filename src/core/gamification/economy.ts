@@ -7,21 +7,20 @@ type EconomyInput = {
 };
 
 export const difficultyMultipliers: Record<Difficulty, number> = {
-  principiante: 1.0,
-  avanzado: 1.15,
-  experto: 1.3,
-  maestro: 1.45,
-  gran_maestro: 1.6,
+  principiante: 0.5,
+  avanzado: 0.65,
+  experto: 0.7,
+  maestro: 0.85,
+  gran_maestro: 1,
 };
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function computePerformanceFromScore(score: number, difficulty: Difficulty): number {
-  const multiplier = difficultyMultipliers[difficulty];
+export function computePerformanceFromScore(score: number, _difficulty: Difficulty): number {
   const performance = clamp(score / 100, 0, 1);
-  return clamp(performance * (0.92 + 0.08 * multiplier), 0, 1);
+  return performance;
 }
 
 export function computeXp({ score, difficulty, isDaily }: EconomyInput): number {

@@ -25,10 +25,14 @@ import { navigateToNextChallenge } from '../../shared/session/challengeNavigatio
 import { resetSessionStreak } from '../../shared/session/sessionStreak';
 import { formatNeuroCoinRewardCompact } from '../../shared/economy/neuroCoins';
 import { NEURO_COIN_COSTS } from '../../shared/economy/neuroCoinCosts';
+import { spendNeuroCoins } from '../../shared/economy/neuroCoinService';
 import NeuroCoinActionButton from '../../shared/economy/NeuroCoinActionButton';
+import HelpActionsGrid from '../../shared/economy/HelpActionsGrid';
 import PlayerEconomyBar from '../../shared/economy/PlayerEconomyBar';
 import useGameHelp from '../../shared/economy/useGameHelp';
+import { useNeuroCoinFeedback } from '../../shared/economy/useNeuroCoinFeedback';
 import { RewardChestGrant } from '../../shared/gamification/rewardChest';
+import { useGameBackToGames } from '../../shared/session/useBackNavigationGuards';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'FocusGrid'>;
 
@@ -53,6 +57,7 @@ type ResultSummary = {
 
 export default function FocusGridScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  useGameBackToGames(navigation);
   const { width } = useWindowDimensions();
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
@@ -79,8 +84,13 @@ export default function FocusGridScreen({ route, navigation }: Props) {
   const [xpTotal, setXpTotal] = useState(0);
   const [neuroCoins, setNeuroCoins] = useState(0);
   const [hintedValue, setHintedValue] = useState<number | null>(null);
+  const [extraTime3Uses, setExtraTime3Uses] = useState(0);
+  const [extraTime6Uses, setExtraTime6Uses] = useState(0);
+  const MAX_EXTRA_TIME_3_USES = 3;
+  const MAX_EXTRA_TIME_6_USES = 3;
   const hintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { tapFeedback, setTapFeedback, clearFeedback, applyTapFeedback } = useTapFeedback();
+  const { message: economyFeedback2, showNeuroCoinError: showTimeError, showNeuroCoinSpendFeedback: showTimeSpend } = useNeuroCoinFeedback();
 
   const clearHint = useCallback(() => {
     if (hintTimeoutRef.current) {
@@ -98,8 +108,8 @@ export default function FocusGridScreen({ route, navigation }: Props) {
     executeHelp: handleRevealNext,
   } = useGameHelp({
     helpId: 'focus_grid_reveal_next',
-    cost: NEURO_COIN_COSTS.focusGridRevealNext,
-    maxUses: 2,
+    cost: NEURO_COIN_COSTS.focusGridRevealNextBlink,
+    maxUses: 3,
     isAvailable: () => !(dailyBlockedReason || phase !== 'playing' || didFinish || finishing),
     performEffect: ({ newBalance }) => {
       setNeuroCoins(newBalance);
@@ -111,6 +121,28 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       }, 1000);
     },
   });
+
+  const handleExtraTime3 = useCallback(async () => {
+    if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    if (extraTime3Uses >= MAX_EXTRA_TIME_3_USES) return;
+    const result = await spendNeuroCoins(NEURO_COIN_COSTS.focusGridExtra3Seconds, 'focus_grid_extra_3s');
+    if (!result.success) { showTimeError('No tienes suficientes NeuroCoins'); return; }
+    setNeuroCoins(result.newBalance);
+    setTimeLeft((prev) => prev + 3);
+    setExtraTime3Uses((prev) => prev + 1);
+    showTimeSpend(NEURO_COIN_COSTS.focusGridExtra3Seconds);
+  }, [dailyBlockedReason, didFinish, extraTime3Uses, finishing, phase, showTimeError, showTimeSpend]);
+
+  const handleExtraTime6 = useCallback(async () => {
+    if (dailyBlockedReason || phase !== 'playing' || didFinish || finishing) return;
+    if (extraTime6Uses >= MAX_EXTRA_TIME_6_USES) return;
+    const result = await spendNeuroCoins(NEURO_COIN_COSTS.focusGridExtra6Seconds, 'focus_grid_extra_6s');
+    if (!result.success) { showTimeError('No tienes suficientes NeuroCoins'); return; }
+    setNeuroCoins(result.newBalance);
+    setTimeLeft((prev) => prev + 6);
+    setExtraTime6Uses((prev) => prev + 1);
+    showTimeSpend(NEURO_COIN_COSTS.focusGridExtra6Seconds);
+  }, [dailyBlockedReason, didFinish, extraTime6Uses, finishing, phase, showTimeError, showTimeSpend]);
 
   const prepareFreshSession = useCallback(
     (nextSeed: number) => {
@@ -130,6 +162,8 @@ export default function FocusGridScreen({ route, navigation }: Props) {
       setResultSummary(null);
       setTapFeedback(null);
       clearHint();
+      setExtraTime3Uses(0);
+      setExtraTime6Uses(0);
       resetRevealHelp();
     },
     [clearHint, config.totalSeconds, resetRevealHelp, totalCells],
@@ -470,7 +504,7 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
   return (
     <>
-      <Screen>
+      <Screen scroll={false}>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card
           variant="primary"
@@ -492,9 +526,6 @@ export default function FocusGridScreen({ route, navigation }: Props) {
           <View style={{ marginTop: 8 }}>
             {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Grid: {config.gridSize}x{config.gridSize}
-          </Text>
           <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
             Siguiente: {Math.min(nextExpected, totalCells)} · Fallos: {mistakes} · Precisión: {accuracy}%
           </Text>
@@ -502,16 +533,33 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
         {!dailyBlockedReason ? (
           <View style={{ gap: 6 }}>
-            <NeuroCoinActionButton
-              label="Mostrar"
-              icon="👁"
-              cost={NEURO_COIN_COSTS.focusGridRevealNext}
-              usesLeft={revealUsesLeft}
-              disabled={!canReveal}
-              onPress={handleRevealNext}
-              tone="blue"
-            />
-            {revealFeedback ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{revealFeedback}</Text> : null}
+            <HelpActionsGrid>
+              <NeuroCoinActionButton
+                label="+3 segundos"
+                icon="⏱️"
+                cost={NEURO_COIN_COSTS.focusGridExtra3Seconds}
+                usesLeft={MAX_EXTRA_TIME_3_USES - extraTime3Uses}
+                disabled={didFinish || finishing || phase !== 'playing' || extraTime3Uses >= MAX_EXTRA_TIME_3_USES}
+                onPress={handleExtraTime3}
+              />
+              <NeuroCoinActionButton
+                label="+6 segundos"
+                icon="⏰"
+                cost={NEURO_COIN_COSTS.focusGridExtra6Seconds}
+                usesLeft={MAX_EXTRA_TIME_6_USES - extraTime6Uses}
+                disabled={didFinish || finishing || phase !== 'playing' || extraTime6Uses >= MAX_EXTRA_TIME_6_USES}
+                onPress={handleExtraTime6}
+              />
+              <NeuroCoinActionButton
+                label="Mostrar"
+                icon="👁"
+                cost={NEURO_COIN_COSTS.focusGridRevealNextBlink}
+                usesLeft={revealUsesLeft}
+                disabled={!canReveal}
+                onPress={handleRevealNext}
+              />
+            </HelpActionsGrid>
+            {(revealFeedback || economyFeedback2) ? <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>{revealFeedback ?? economyFeedback2}</Text> : null}
           </View>
         ) : null}
 
