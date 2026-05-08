@@ -12,7 +12,6 @@ import Button from '../shared/ui/Button';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 import { logEvent } from '../core/telemetry';
-import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
 import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 
 type LeagueStatus = 'ascenso' | 'media' | 'descenso' | 'sin_datos';
@@ -57,6 +56,18 @@ function getTimeUntilReset(now = new Date()): { days: number; hours: number; lab
   const days = Math.floor(hoursTotal / 24);
   const hours = hoursTotal % 24;
   return { days, hours, label: `Reset en ${days}d ${hours}h` };
+}
+
+function formatSeasonLabel(seasonId: string): string {
+  const match = /^(\d{4})-W(\d{1,2})$/.exec(seasonId);
+  if (!match) return seasonId;
+  const year = parseInt(match[1], 10);
+  const week = parseInt(match[2], 10);
+  const jan4 = new Date(year, 0, 4);
+  const day = jan4.getDay();
+  const toMonday = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(year, 0, 4 + toMonday + (week - 1) * 7);
+  return weekStart.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
 }
 
 async function generateMockLeaderboard(userSP: number, leagueId: 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'grand_master' | 'legend', seasonId: string, userName = 'Tu'): Promise<LeaderboardEntry[]> {
@@ -226,10 +237,10 @@ export default function LeaderboardScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <Text style={{ fontSize: 30 }}>{tierIcon}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Liga {league.name}</Text>
-              <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Temporada {seasonId || '-'}</Text>
+              <Text style={[theme.typography.h2, { color: theme.colors.text }]}>{league.name}</Text>
+              <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>{formatSeasonLabel(seasonId) || '-'}</Text>
             </View>
-            <NeuroCoinBadge amount={seasonPoints} compact />
+            <Text style={{ color: theme.colors.text, fontWeight: '900', fontSize: 14 }}>{formatXp(xpTotal)}</Text>
           </View>
 
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

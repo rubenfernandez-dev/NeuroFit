@@ -32,7 +32,7 @@ export const NEURO_COIN_COSTS = {
   numberMatchSuggestMove: 40,
   numberMatchRestoreMistake: 50,
   numberMatchRemovePairFromSelected: 50,
-  numberMatchAddLine: 30,
+  numberMatchAddLine: 8,
 
   // Compatibilidad con nombres previos
   mentalMathExtraTime: 30,

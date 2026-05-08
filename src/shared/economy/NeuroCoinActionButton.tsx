@@ -45,9 +45,12 @@ export default function NeuroCoinActionButton({
         ...containerStyle,
       })}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <Text style={{ color: '#3F2A00', fontWeight: '900', fontSize: 11, flexShrink: 1 }} numberOfLines={1}>
-          {icon ? `${icon} ${label}` : label}
+      <Text style={{ color: '#3F2A00', fontWeight: '900', fontSize: 11, flexShrink: 1 }} numberOfLines={1}>
+        {icon ? `${icon} ${label}` : label}
+      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4, marginTop: 2 }}>
+        <Text style={{ color: '#7C2D12', fontSize: 9, fontWeight: '800' }} numberOfLines={1}>
+          {typeof usesLeft === 'number' ? `⚡ ${Math.max(0, usesLeft)} Rest` : '⚡'}
         </Text>
         <View
           style={{
@@ -64,11 +67,6 @@ export default function NeuroCoinActionButton({
           </Text>
         </View>
       </View>
-      {typeof usesLeft === 'number' ? (
-        <Text style={{ color: '#7C2D12', fontSize: 9, fontWeight: '800' }} numberOfLines={1}>
-          Usos: {Math.max(0, usesLeft)}
-        </Text>
-      ) : null}
     </Pressable>
   );
 }

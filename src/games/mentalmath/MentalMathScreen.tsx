@@ -428,7 +428,10 @@ export default function MentalMathScreen({ route, navigation }: Props) {
               {inputValue || '...'}
             </Text>
             <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-              +{sessionConfig.bonusOnCorrectSec}s por acierto · Máx. fallos: {sessionConfig.maxErrors}
+              +{sessionConfig.bonusOnCorrectSec}s por acierto
+            </Text>
+            <Text style={{ color: theme.colors.textMuted, marginTop: 2 }}>
+              Máx. fallos: {sessionConfig.maxErrors}
             </Text>
           </View>
 

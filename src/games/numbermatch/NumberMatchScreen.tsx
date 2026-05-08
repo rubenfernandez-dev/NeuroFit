@@ -684,16 +684,30 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
             elevation: 3,
           }}
         >
-          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Number Match · {difficultyLabel(difficulty)}</Text>
-          <View style={{ marginTop: 8 }}>
-            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', gap: 10 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Number Match · {difficultyLabel(difficulty)}</Text>
+              <View style={{ marginTop: 8 }}>
+                {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
+              </View>
+            </View>
+            <View
+              style={{
+                width: 118,
+                borderWidth: 1,
+                borderColor: 'rgba(148,163,184,0.30)',
+                borderRadius: 14,
+                backgroundColor: theme.mode === 'dark' ? 'rgba(15,23,42,0.44)' : 'rgba(241,245,249,0.90)',
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                justifyContent: 'space-between',
+              }}
+            >
+              <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>⏱ {msToClock(elapsedSec * 1000)}</Text>
+              <Text style={{ color: '#22C55E', fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center', marginTop: 2 }}>✅ {validMatches}</Text>
+              <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>❌ {invalidMatches}</Text>
+            </View>
           </View>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            ⏱ {msToClock(elapsedSec * 1000)} · Puntaje: {score}
-          </Text>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            ✔️ {validMatches} · ❌ {invalidMatches} · Limpieza: {boardClearedPercent}%
-          </Text>
         </Card>
 
         {dailyBlockedReason ? (

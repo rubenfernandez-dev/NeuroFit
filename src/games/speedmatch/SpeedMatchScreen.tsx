@@ -7,7 +7,6 @@ import { computeSpeedMatchRewardScore, evaluateSpeedMatchWin, getSpeedMatchConfi
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import Screen from '../../shared/ui/Screen';
-import TimerDisplay from '../../shared/ui/TimerDisplay';
 import { useAppTheme } from '../../shared/theme/theme';
 import { msToClock } from '../../shared/utils/time';
 import { createSeededRng, pickOne } from '../../shared/utils/random';
@@ -514,22 +513,29 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
             elevation: 3,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
-            <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.durationSec} compact align="right" />
+          <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Speed Match · {difficultyLabel(difficulty)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'stretch', gap: 10, marginTop: 6 }}>
+            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+              {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700', marginBottom: 4 }}>Reto diario</Text> : null}
+              <Text style={{ color: theme.colors.textMuted, fontSize: 12 }}>Ronda: {round} · Máx. fallos: {config.maxMistakes}</Text>
+            </View>
+            <View
+              style={{
+                width: 118,
+                borderWidth: 1,
+                borderColor: 'rgba(148,163,184,0.30)',
+                borderRadius: 14,
+                backgroundColor: theme.mode === 'dark' ? 'rgba(15,23,42,0.44)' : 'rgba(241,245,249,0.90)',
+                paddingHorizontal: 8,
+                paddingVertical: 6,
+                justifyContent: 'space-between',
+              }}
+            >
+              <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>⏱ {timeLeft}s</Text>
+              <Text style={{ color: '#22C55E', fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center', marginTop: 2 }}>✅ {correct}</Text>
+              <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>❌ {mistakes}</Text>
+            </View>
           </View>
-          <View style={{ marginTop: 8 }}>
-            {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
-          </View>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-            Ronda: {round}
-          </Text>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Score: {score} · Aciertos: {correct} · Fallos: {mistakes} · Precisión: {accuracyPct}%
-          </Text>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Máx. fallos: {config.maxMistakes}
-          </Text>
         </Card>
 
         {!dailyBlockedReason ? (
@@ -604,7 +610,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
           variant="primary"
           onPress={restart}
           disabled={isDaily || !!dailyBlockedReason}
-          style={{ minHeight: 50, backgroundColor: '#2563EB', borderColor: '#1D4ED8' }}
+          style={{ minHeight: 50, backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }}
         />
       </Screen>
 

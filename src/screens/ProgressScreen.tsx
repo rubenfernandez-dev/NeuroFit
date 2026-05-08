@@ -17,9 +17,19 @@ import Pill from '../shared/ui/Pill';
 import Screen from '../shared/ui/Screen';
 import StreakWidget from '../shared/ui/StreakWidget';
 import XPLevelIndicator from '../shared/ui/XPLevelIndicator';
-import NeuroCoinBadge from '../shared/economy/NeuroCoinBadge';
-import { formatNeuroCoins } from '../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
+
+function formatSeasonLabel(seasonId: string): string {
+  const match = /^(\d{4})-W(\d{1,2})$/.exec(seasonId);
+  if (!match) return seasonId || '–';
+  const year = parseInt(match[1], 10);
+  const week = parseInt(match[2], 10);
+  const jan4 = new Date(year, 0, 4);
+  const day = jan4.getDay();
+  const toMonday = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(year, 0, 4 + toMonday + (week - 1) * 7);
+  return weekStart.toLocaleString('es-ES', { month: 'long', year: 'numeric' });
+}
 
 type Snapshot = {
   xpTotal: number;
@@ -187,9 +197,12 @@ export default function ProgressScreen() {
   const bestGame = useMemo(() => getBestGame(snapshot.stats, enabledGames), [snapshot.stats]);
 
   const leagueAccent = getLeagueAccent(snapshot.leagueId);
-  const top10GoalSp = league.minSeasonPoints + 1800;
-  const distanceToTop10 = Math.max(0, top10GoalSp - snapshot.seasonPoints);
-  const top10Progress = top10GoalSp > 0 ? Math.min(1, snapshot.seasonPoints / top10GoalSp) : 1;
+  const leagueXpGoals: Record<string, number> = {
+    bronze: 320, silver: 500, gold: 720, platinum: 1100, diamond: 1800, master: 2800, grand_master: 4200, legend: 6000,
+  };
+  const top10GoalXp = leagueXpGoals[snapshot.leagueId] ?? 500;
+  const distanceToTop10 = Math.max(0, top10GoalXp - snapshot.xpTotal);
+  const top10Progress = top10GoalXp > 0 ? Math.min(1, snapshot.xpTotal / top10GoalXp) : 1;
 
   const xpToNextLevel = nextLevel ? nextLevel.minXp - snapshot.xpTotal : 0;
   const xpCurrentLevelStart = currentLevel.minXp;
@@ -305,24 +318,24 @@ export default function ProgressScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <Text style={{ fontSize: 36 }}>{getLeagueTrophy(snapshot.leagueId)}</Text>
             <View style={{ flex: 1 }}>
-              <Text style={[theme.typography.h2, { color: theme.colors.text }]}>Liga </Text>
+              <Text style={[theme.typography.h2, { color: theme.colors.text }]}>{league.name}</Text>
               <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 2 }]}>
                 Competencia semanal
               </Text>
             </View>
-            <NeuroCoinBadge amount={snapshot.seasonPoints} compact />
+            <Text style={{ color: theme.colors.text, fontWeight: '900', fontSize: 14 }}>{snapshot.xpTotal.toLocaleString()} XP</Text>
           </View>
 
           <View style={{ marginTop: 12, flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
             <Pill label={`${league.badgeEmoji} ${league.name}`} tone="default" />
-            <Pill label={`Temporada ${snapshot.seasonId || '–'}`} tone="pink" />
+            <Pill label={formatSeasonLabel(snapshot.seasonId)} tone="pink" />
           </View>
 
           <View style={{ marginTop: 14 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
               <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Hacia Top 10</Text>
               <Text style={[theme.typography.caption, { color: theme.colors.textMuted, fontWeight: '600' }]}>
-                {distanceToTop10 > 0 ? `Faltan ${formatNeuroCoins(distanceToTop10)}` : 'Objetivo alcanzado'}
+                {distanceToTop10 > 0 ? `Faltan ${distanceToTop10.toLocaleString()} XP` : 'Objetivo alcanzado'}
               </Text>
             </View>
             <AnimatedProgressBar

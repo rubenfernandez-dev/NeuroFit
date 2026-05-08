@@ -526,8 +526,12 @@ export default function FocusGridScreen({ route, navigation }: Props) {
           <View style={{ marginTop: 8 }}>
             {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4 }}>
-            Siguiente: {Math.min(nextExpected, totalCells)} · Fallos: {mistakes} · Precisión: {accuracy}%
+          <View style={{ alignItems: 'center', marginTop: 8 }}>
+            <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>Siguiente</Text>
+            <Text style={{ color: theme.colors.text, fontSize: 42, fontWeight: '900', lineHeight: 46 }}>{Math.min(nextExpected, totalCells)}</Text>
+          </View>
+          <Text style={{ color: theme.colors.textMuted, marginTop: 4, fontSize: 12 }}>
+            Fallos: {mistakes} · Precisión: {accuracy}%
           </Text>
         </Card>
 

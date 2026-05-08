@@ -14,24 +14,24 @@ export type PatternMemoryDifficultyConfig = {
 
 const CONFIG_BY_DIFFICULTY: Record<Difficulty, PatternMemoryDifficultyConfig> = {
   principiante: {
-    tileOnMs: 500,
-    tilePauseMs: 180,
+    tileOnMs: 450,
+    tilePauseMs: 80,
     maxRound: 6,
     totalSeconds: 55,
     reactionBestMs: 260,
     reactionWorstMs: 1400,
   },
   avanzado: {
-    tileOnMs: 430,
-    tilePauseMs: 170,
+    tileOnMs: 400,
+    tilePauseMs: 70,
     maxRound: 8,
     totalSeconds: 60,
     reactionBestMs: 240,
     reactionWorstMs: 1300,
   },
   experto: {
-    tileOnMs: 360,
-    tilePauseMs: 150,
+    tileOnMs: 350,
+    tilePauseMs: 60,
     maxRound: 10,
     totalSeconds: 65,
     reactionBestMs: 220,
@@ -39,7 +39,7 @@ const CONFIG_BY_DIFFICULTY: Record<Difficulty, PatternMemoryDifficultyConfig> = 
   },
   maestro: {
     tileOnMs: 300,
-    tilePauseMs: 120,
+    tilePauseMs: 50,
     maxRound: 12,
     totalSeconds: 70,
     reactionBestMs: 210,
@@ -47,7 +47,7 @@ const CONFIG_BY_DIFFICULTY: Record<Difficulty, PatternMemoryDifficultyConfig> = 
   },
   gran_maestro: {
     tileOnMs: 260,
-    tilePauseMs: 100,
+    tilePauseMs: 40,
     maxRound: 14,
     totalSeconds: 72,
     reactionBestMs: 190,

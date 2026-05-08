@@ -29,7 +29,7 @@ export default function PlayerEconomyBar({
   const hasExternalValues = typeof xp === 'number' || typeof neuroCoins === 'number';
   const xpValue = typeof xp === 'number' ? Math.max(0, Math.floor(xp)) : state.xp;
   const neuroCoinValue = typeof neuroCoins === 'number' ? Math.max(0, Math.floor(neuroCoins)) : state.neuroCoins;
-  const leagueLabel = middleLabel && middleLabel.trim().length > 0 ? middleLabel : `🏆 ${state.leagueLabel}`;
+  const leagueLabel = middleLabel && middleLabel.trim().length > 0 ? middleLabel : state.leagueLabel;
   const leagueSubLabel = middleSubLabel;
 
   useFocusEffect(
