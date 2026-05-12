@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -44,6 +44,7 @@ type ResultSummary = {
 
 export default function MentalMathScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  const { width } = useWindowDimensions();
   useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
@@ -285,7 +286,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     if (didFinish) return;
-    if (wrong >= sessionConfig.maxErrors) {
+    if (wrong > sessionConfig.maxErrors) {
       finish('error_limit');
     }
   }, [didFinish, sessionConfig.maxErrors, wrong]);
@@ -402,7 +403,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
 
   return (
     <>
-    <Screen scroll={false}>
+    <Screen scroll={false} contentStyle={{ flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}>
       <PlayerEconomyBar xp={xpTotal} neuroCoins={neuroCoins} compact />
 
       <Card
@@ -419,7 +420,7 @@ export default function MentalMathScreen({ route, navigation }: Props) {
         }}
       >
         <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Mental Math · {difficultyLabel(difficulty)}</Text>
-        <View style={{ marginTop: 8, flexDirection: 'row', gap: 12, alignItems: 'stretch' }}>
+        <View style={{ marginTop: 8, flexDirection: 'row', gap: 10, alignItems: 'stretch' }}>
           <View style={{ flex: 1, minWidth: 0 }}>
             {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
             <Text style={{ color: theme.colors.text, fontSize: 32, fontWeight: '700', marginTop: 10 }}>{current?.text ?? '-'}</Text>
@@ -427,12 +428,13 @@ export default function MentalMathScreen({ route, navigation }: Props) {
             <Text style={{ color: theme.colors.text, marginTop: 2, fontWeight: '900', fontSize: 36, letterSpacing: 0.5 }}>
               {inputValue || '...'}
             </Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 8 }}>
-              +{sessionConfig.bonusOnCorrectSec}s por acierto
+            <Text
+              numberOfLines={1}
+              style={{ color: theme.colors.textMuted, marginTop: 8, fontSize: width < 380 ? 11 : 12 }}
+            >
+              Max fallos: 5 • Ronda {correct}/{sessionConfig.minCorrectToWin}
             </Text>
-            <Text style={{ color: theme.colors.textMuted, marginTop: 2 }}>
-              Máx. fallos: {sessionConfig.maxErrors}
-            </Text>
+            <Text style={{ color: theme.colors.textMuted, marginTop: 2, fontSize: 11 }}>La ronda mínima marca victoria, la sesión continúa hasta tiempo o superar fallos.</Text>
           </View>
 
           <View

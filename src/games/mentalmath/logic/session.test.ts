@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { computeMentalMathRewardScore, evaluateMentalMathWin, getMentalMathSessionConfig } from './session';
 
 describe('mentalmath session rules', () => {
-  it('falla al alcanzar limite de errores', () => {
+  it('falla solo al superar el limite de errores', () => {
     const config = getMentalMathSessionConfig('maestro');
-    const won = evaluateMentalMathWin({ correct: 20, wrong: config.maxErrors, difficulty: 'maestro' });
-    expect(won).toBe(false);
+    const atLimit = evaluateMentalMathWin({ correct: 20, wrong: config.maxErrors, difficulty: 'maestro' });
+    const aboveLimit = evaluateMentalMathWin({ correct: 20, wrong: config.maxErrors + 1, difficulty: 'maestro' });
+    expect(atLimit).toBe(true);
+    expect(aboveLimit).toBe(false);
   });
 
   it('exige aciertos y precision minima para victoria', () => {

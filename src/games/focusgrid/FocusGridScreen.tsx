@@ -572,10 +572,11 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         ) : null}
 
         {!dailyBlockedReason ? (
-          <Card variant="cyan" style={{ paddingBottom: 6 }}>
+          <Card variant="cyan" style={{ paddingBottom: 4 }}>
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, textAlign: 'center' }]}>
               Toca los números en orden ascendente
             </Text>
+            <Text style={[theme.typography.body, { color: theme.colors.text, textAlign: 'center', marginTop: 6 }]}>Siguiente: {Math.min(nextExpected, totalCells)}</Text>
 
             <FocusGridBoard
               numbers={numbers}

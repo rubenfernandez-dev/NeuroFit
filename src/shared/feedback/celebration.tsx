@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, Modal, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useAppTheme } from '../theme/theme';
 
 type CelebrationEvent = {
@@ -133,74 +133,78 @@ export function CelebrationOverlay() {
   if (!event) return null;
 
   return (
-    <View
-      pointerEvents="none"
-      style={[
-        StyleSheet.absoluteFillObject,
-        {
-          backgroundColor: 'transparent',
+    <Modal transparent visible animationType="none" statusBarTranslucent>
+      <View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           zIndex: 9999,
-          elevation: 999,
-        },
-      ]}
-    >
-      <Animated.View
-        style={[
-          StyleSheet.absoluteFillObject,
-          {
-            opacity: flashOpacity,
-            backgroundColor: theme.mode === 'dark' ? '#FFFFFF' : theme.colors.primarySoft,
-          },
-        ]}
-      />
-      <Animated.View style={[StyleSheet.absoluteFillObject, { opacity }]}> 
-        {particlesRef.current.map((particle, index) => {
-          const translateY = translateValuesRef.current[index];
-          const driftX = rotateValuesRef.current[index]?.interpolate({
-            inputRange: [0, 0.5, 1],
-            outputRange: [0, particle.drift * 0.55, particle.drift],
-          });
-          const endRotateDeg = Number.isFinite(particle.rotateDeg) ? particle.rotateDeg : 0;
-          const rotate = rotateValuesRef.current[index]?.interpolate({
-            inputRange: [0, 1],
-            outputRange: ['0deg', `${endRotateDeg}deg`],
-          });
-          const scale = rotateValuesRef.current[index]?.interpolate({
-            inputRange: [0, 0.12, 0.7, 1],
-            outputRange: [0.75, 1.22, 1.04, 0.92],
-          });
-          const particleOpacity = rotateValuesRef.current[index]?.interpolate({
-            inputRange: [0, 0.08, 0.86, 1],
-            outputRange: [0, 1, 1, 0],
-          });
+          elevation: 9999,
+          backgroundColor: 'transparent',
+        }}
+      >
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              opacity: flashOpacity,
+              backgroundColor: theme.mode === 'dark' ? '#FFFFFF' : theme.colors.primarySoft,
+            },
+          ]}
+        />
+        <Animated.View style={[StyleSheet.absoluteFillObject, { opacity }]}> 
+          {particlesRef.current.map((particle, index) => {
+            const translateY = translateValuesRef.current[index];
+            const driftX = rotateValuesRef.current[index]?.interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [0, particle.drift * 0.55, particle.drift],
+            });
+            const endRotateDeg = Number.isFinite(particle.rotateDeg) ? particle.rotateDeg : 0;
+            const rotate = rotateValuesRef.current[index]?.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['0deg', `${endRotateDeg}deg`],
+            });
+            const scale = rotateValuesRef.current[index]?.interpolate({
+              inputRange: [0, 0.12, 0.7, 1],
+              outputRange: [0.75, 1.22, 1.04, 0.92],
+            });
+            const particleOpacity = rotateValuesRef.current[index]?.interpolate({
+              inputRange: [0, 0.08, 0.86, 1],
+              outputRange: [0, 1, 1, 0],
+            });
 
-          return (
-            <Animated.View
-              key={`${event.key}-${index}`}
-              style={{
-                position: 'absolute',
-                left: particle.x,
-                top: -36,
-                width: particle.size,
-                height: particle.size * 1.5,
-                borderRadius: 3,
-                backgroundColor: particle.color,
-                opacity: particleOpacity ?? 1,
-                shadowColor: particle.color,
-                shadowOpacity: 0.35,
-                shadowRadius: 8,
-                shadowOffset: { width: 0, height: 2 },
-                transform: [
-                  { translateY: translateY ?? 0 },
-                  { translateX: driftX ?? 0 },
-                  { scale: scale ?? 1 },
-                  { rotate: rotate ?? '0deg' },
-                ],
-              }}
-            />
-          );
-        })}
-      </Animated.View>
-    </View>
+            return (
+              <Animated.View
+                key={`${event.key}-${index}`}
+                style={{
+                  position: 'absolute',
+                  left: particle.x,
+                  top: -36,
+                  width: particle.size,
+                  height: particle.size * 1.5,
+                  borderRadius: 3,
+                  backgroundColor: particle.color,
+                  opacity: particleOpacity ?? 1,
+                  shadowColor: particle.color,
+                  shadowOpacity: 0.35,
+                  shadowRadius: 8,
+                  shadowOffset: { width: 0, height: 2 },
+                  transform: [
+                    { translateY: translateY ?? 0 },
+                    { translateX: driftX ?? 0 },
+                    { scale: scale ?? 1 },
+                    { rotate: rotate ?? '0deg' },
+                  ],
+                }}
+              />
+            );
+          })}
+        </Animated.View>
+      </View>
+    </Modal>
   );
 }

@@ -38,9 +38,9 @@ export type MentalMathSessionConfig = {
  */
 const CONFIG_BY_DIFFICULTY: Record<Difficulty, MentalMathSessionConfig> = {
   // === CURRENT (default) ===
-  principiante: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 3, maxErrors: 8, minCorrectToWin: 7, minAccuracyPctToWin: 50 },
-  avanzado: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 3, maxErrors: 7, minCorrectToWin: 8, minAccuracyPctToWin: 55 },
-  experto: { initialTimeSec: 62, maxTimeSec: 112, bonusOnCorrectSec: 3, maxErrors: 6, minCorrectToWin: 9, minAccuracyPctToWin: 58 },
+  principiante: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 1.5, maxErrors: 5, minCorrectToWin: 7, minAccuracyPctToWin: 50 },
+  avanzado: { initialTimeSec: 60, maxTimeSec: 110, bonusOnCorrectSec: 1.5, maxErrors: 5, minCorrectToWin: 8, minAccuracyPctToWin: 55 },
+  experto: { initialTimeSec: 62, maxTimeSec: 112, bonusOnCorrectSec: 1.5, maxErrors: 5, minCorrectToWin: 9, minAccuracyPctToWin: 58 },
   maestro: { initialTimeSec: 68, maxTimeSec: 118, bonusOnCorrectSec: 4, maxErrors: 5, minCorrectToWin: 10, minAccuracyPctToWin: 62 },
   gran_maestro: { initialTimeSec: 72, maxTimeSec: 124, bonusOnCorrectSec: 4, maxErrors: 5, minCorrectToWin: 11, minAccuracyPctToWin: 65 },
 
@@ -98,7 +98,7 @@ export function evaluateMentalMathWin(input: {
   difficulty: Difficulty;
 }): boolean {
   const config = getMentalMathSessionConfig(input.difficulty);
-  if (input.wrong >= config.maxErrors) return false;
+  if (input.wrong > config.maxErrors) return false;
 
   const attempts = input.correct + input.wrong;
   const accuracy = attempts > 0 ? (input.correct / attempts) * 100 : 0;

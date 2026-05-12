@@ -142,7 +142,7 @@ function ConfettiSimple({ enabled, durationMs = 1600, particleCount = 20, onDone
   return (
     <View
       pointerEvents="none"
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10 }}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, elevation: 9999 }}
     >
       {particles.map((particle, index) => (
         <Animated.Text

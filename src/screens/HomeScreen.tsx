@@ -207,28 +207,23 @@ export default function HomeScreen({ navigation }: Props) {
 
         <Card
           style={{
-            borderColor: theme.colors.primary,
-            borderWidth: 2,
-            backgroundColor: theme.colors.primary,
-            shadowColor: theme.colors.primary,
-            shadowOpacity: 0.22,
-            shadowRadius: 14,
-            shadowOffset: { width: 0, height: 8 },
-            elevation: 4,
+            borderColor: 'rgba(255, 140, 0, 0.55)',
+            borderWidth: 1,
+            backgroundColor: 'rgba(255, 140, 0, 0.15)',
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <Text style={[theme.typography.h3, { color: '#FFFFFF' }]}>{dailyCompleted ? '✅ Reto diario' : '🎯 Reto diario'}</Text>
+            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{dailyCompleted ? '✅ Reto diario' : '🎯 Reto diario'}</Text>
             <Pill label={`Racha ${streakCurrent} · Max ${streakBest}`} tone="warning" />
           </View>
-          <Text style={[theme.typography.bodySmall, { color: '#FFFFFF', marginTop: 6 }]}>
+          <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, marginTop: 6 }]}>
             {dailyCompleted
               ? `Completado por hoy (${dailyProgress}). ¡Gran trabajo!`
               : `Progreso ${dailyProgress}. Completa el circuito para reclamar XP extra.`}
           </Text>
           <View style={{ marginTop: 10 }}>
-            <Text style={[theme.typography.caption, { color: '#DBEAFE' }]}>Ranking semanal actual: #{userRank}</Text>
-            <Text style={[theme.typography.caption, { color: '#DBEAFE', marginTop: 2 }]}>Te faltan {xpToTop10} XP para Top 10 · {xpToSafety} XP para zona segura</Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Ranking semanal actual: #{userRank}</Text>
+            <Text style={[theme.typography.caption, { color: theme.colors.textMuted, marginTop: 2 }]}>Te faltan {xpToTop10} XP para Top 10 · {xpToSafety} XP para zona segura</Text>
           </View>
           <View style={{ marginTop: 10 }}>
             <ProgressBar value={top10Progress} color="#FDBA74" />
