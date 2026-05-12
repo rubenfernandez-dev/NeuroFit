@@ -42,6 +42,7 @@ export async function grantXp(input: GrantXpInput) {
   const profile = await getProfile();
   const earnedXp = Math.max(0, Math.round(baseXp * rewardMultiplier));
   const xpTotal = profile.xpTotal + earnedXp;
+  const xpWeekly = profile.xpWeekly + earnedXp;
   const level = getLevelByXp(xpTotal);
 
   if (__DEV__) {
@@ -57,7 +58,7 @@ export async function grantXp(input: GrantXpInput) {
 
   logEvent('xp_granted', { gameId: input.gameId, mode, difficulty: input.difficulty, baseXp, rewardMultiplier, earnedXp });
 
-  const updated = await updateProfile({ xpTotal, levelId: level.id });
+  const updated = await updateProfile({ xpTotal, xpWeekly, levelId: level.id });
   return { earnedXp, profile: updated, level };
 }
 
@@ -65,10 +66,11 @@ export async function grantFlatXp({ gameId, amount, source = 'manual' }: GrantFl
   const profile = await getProfile();
   const earnedXp = Math.max(0, Math.floor(amount));
   const xpTotal = profile.xpTotal + earnedXp;
+  const xpWeekly = profile.xpWeekly + earnedXp;
   const level = getLevelByXp(xpTotal);
 
   logEvent('xp_granted_flat', { gameId, source, earnedXp });
 
-  const updated = await updateProfile({ xpTotal, levelId: level.id });
+  const updated = await updateProfile({ xpTotal, xpWeekly, levelId: level.id });
   return { earnedXp, profile: updated, level };
 }

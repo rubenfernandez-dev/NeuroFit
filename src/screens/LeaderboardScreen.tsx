@@ -1,6 +1,8 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../app/routes';
 import Card from '../shared/ui/Card';
 import { useAppTheme } from '../shared/theme/theme';
 import { ensureSeasonCurrent } from '../shared/storage/profile';
@@ -82,11 +84,13 @@ async function generateMockLeaderboard(userSP: number, leagueId: 'bronze' | 'sil
 }
 
 export default function LeaderboardScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { theme } = useAppTheme();
   const [seasonId, setSeasonId] = useState('');
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [xpTotal, setXpTotal] = useState(0);
-  const [seasonPoints, setSeasonPoints] = useState(0);
+  const [xpWeekly, setXpWeekly] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
   const [leagueId, setLeagueId] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'grand_master' | 'legend'>('bronze');
   const [rank, setRank] = useState(50);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -98,11 +102,12 @@ export default function LeaderboardScreen() {
     setIsLoading(true);
     try {
       const profile = await ensureSeasonCurrent();
-      const board = await generateMockLeaderboard(profile.xpTotal, profile.leagueId, profile.seasonId, 'Tu');
+      const board = await generateMockLeaderboard(profile.xpWeekly, profile.leagueId, profile.seasonId, 'Tu');
 
       setSeasonId(profile.seasonId);
       setXpTotal(profile.xpTotal);
-      setSeasonPoints(profile.seasonPoints);
+      setXpWeekly(profile.xpWeekly);
+      setNeuroCoins(profile.seasonPoints);
       setLeagueId(profile.leagueId);
       setEntries(board);
       const nextRank = board.find((entry) => entry.isUser)?.rank ?? 50;
@@ -111,7 +116,7 @@ export default function LeaderboardScreen() {
           seasonId: profile.seasonId,
           previousRank: previousRankRef.current,
           rank: nextRank,
-          seasonPoints: profile.seasonPoints,
+          seasonPoints: profile.xpWeekly,
           leagueId: profile.leagueId,
         });
       }
@@ -122,7 +127,7 @@ export default function LeaderboardScreen() {
         seasonId: profile.seasonId,
         leagueId: profile.leagueId,
         rank: nextRank,
-        seasonPoints: profile.seasonPoints,
+        seasonPoints: profile.xpWeekly,
       });
     } catch (error) {
       const kind = classifyDataFailure(error);
@@ -145,17 +150,17 @@ export default function LeaderboardScreen() {
   const progress = nextLeague
     ? Math.min(
         1,
-        Math.max(0, (seasonPoints - league.minSeasonPoints) / Math.max(1, nextLeague.minSeasonPoints - league.minSeasonPoints)),
+        Math.max(0, (xpWeekly - league.minSeasonPoints) / Math.max(1, nextLeague.minSeasonPoints - league.minSeasonPoints)),
       )
     : 1;
 
   const userEntry = useMemo(() => entries.find((entry) => entry.isUser) ?? null, [entries]);
-  const top10Cut = entries.find((entry) => entry.rank === getPromotionCutoff())?.seasonPoints ?? xpTotal;
-  const xpToTop10 = Math.max(0, top10Cut - xpTotal + 1);
+  const top10Cut = entries.find((entry) => entry.rank === getPromotionCutoff())?.seasonPoints ?? xpWeekly;
+  const xpToTop10 = Math.max(0, top10Cut - xpWeekly + 1);
   const deltaToNext = getUserDeltaToNext(entries, userEntry?.rank);
   const demotionCutoff = getDemotionCutoff(entries.length);
   const demotionEntry = entries.find((entry) => entry.rank === demotionCutoff);
-  const xpOverDemotion = demotionEntry ? xpTotal - demotionEntry.seasonPoints : null;
+  const xpOverDemotion = demotionEntry ? xpWeekly - demotionEntry.seasonPoints : null;
   const leagueStatus = getLeagueStatus(userEntry?.rank, entries.length);
   const resetClock = getTimeUntilReset();
 
@@ -215,7 +220,12 @@ export default function LeaderboardScreen() {
         }}
       >
         <View style={{ marginBottom: 12 }}>
-          <PlayerEconomyBar compact xp={xpTotal} neuroCoins={seasonPoints} />
+          <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          <Button title="Ranking semanal" variant="primary" onPress={() => {}} style={{ flex: 1 }} />
+          <Button title="Ranking histórico" variant="secondary" onPress={() => navigation.navigate('HistoricalLeaderboard')} style={{ flex: 1 }} />
         </View>
 
         {loadError ? (
@@ -240,7 +250,7 @@ export default function LeaderboardScreen() {
               <Text style={[theme.typography.h2, { color: theme.colors.text }]}>{league.name}</Text>
               <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>{formatSeasonLabel(seasonId) || '-'}</Text>
             </View>
-            <Text style={{ color: theme.colors.text, fontWeight: '900', fontSize: 14 }}>{formatXp(xpTotal)}</Text>
+            <Text style={{ color: theme.colors.text, fontWeight: '900', fontSize: 14 }}>{formatXp(xpWeekly)}</Text>
           </View>
 
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
@@ -259,7 +269,7 @@ export default function LeaderboardScreen() {
                 </View>
                 <View style={{ marginTop: 10 }}>
                   <AnimatedProgressBar
-                    value={xpToTop10 > 0 ? Math.max(0, Math.min(1, xpTotal / (xpTotal + xpToTop10))) : 1}
+                    value={xpToTop10 > 0 ? Math.max(0, Math.min(1, xpWeekly / (xpWeekly + xpToTop10))) : 1}
                     color={leagueAccent}
                     label={xpToTop10 > 0 ? `Te faltan ${formatXp(xpToTop10)} para Top 10` : 'Ya estas en zona de ascenso'}
                     durationMs={520}

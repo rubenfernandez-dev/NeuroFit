@@ -10,6 +10,9 @@ type ScreenProps = PropsWithChildren<{
 
 export default function Screen({ children, scroll = true, contentStyle }: ScreenProps) {
   const { theme } = useAppTheme();
+  const baseContentStyle = scroll
+    ? { padding: theme.spacing.lg, gap: theme.spacing.md }
+    : { flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 };
   const body = (
     <View
       style={{
@@ -31,11 +34,11 @@ export default function Screen({ children, scroll = true, contentStyle }: Screen
         }}
       />
       {scroll ? (
-        <ScrollView contentContainerStyle={[{ padding: theme.spacing.lg, gap: theme.spacing.md }, contentStyle]}>
+        <ScrollView contentContainerStyle={[baseContentStyle, contentStyle]}>
           {children}
         </ScrollView>
       ) : (
-        <View style={[{ padding: theme.spacing.lg, gap: theme.spacing.md }, contentStyle]}>{children}</View>
+        <View style={[baseContentStyle, contentStyle]}>{children}</View>
       )}
     </View>
   );

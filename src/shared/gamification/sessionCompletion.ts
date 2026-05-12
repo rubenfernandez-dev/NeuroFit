@@ -76,6 +76,18 @@ function getDailyCompletionKey(input: CompleteGameSessionInput): string {
   return `${input.gameId}:${stageKey}:${input.difficulty}`;
 }
 
+function randomInclusive(min: number, max: number): number {
+  const safeMin = Math.floor(Math.min(min, max));
+  const safeMax = Math.floor(Math.max(min, max));
+  return Math.floor(Math.random() * (safeMax - safeMin + 1)) + safeMin;
+}
+
+function resolveSessionStreakBonusSp(sessionStreak: number): number {
+  if (sessionStreak % 5 === 0) return randomInclusive(25, 50);
+  if (sessionStreak % 3 === 0) return randomInclusive(10, 20);
+  return SESSION_STREAK_BONUS_SP;
+}
+
 async function completeDailyGameSession(input: CompleteGameSessionInput): Promise<CompleteGameSessionResult> {
   const {
     gameId,
@@ -286,16 +298,17 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
   };
 
   if (resolvedStreakPolicy === 'increment' && shouldGrantSessionBonus(sessionStreak)) {
+    const streakBonusSp = resolveSessionStreakBonusSp(sessionStreak);
     await grantFlatXp({ gameId, amount: SESSION_STREAK_BONUS_XP, source: 'session_streak_bonus' });
-    await grantFlatSeasonPoints({ gameId, difficulty, amount: SESSION_STREAK_BONUS_SP, source: 'session_streak_bonus' });
+    await grantFlatSeasonPoints({ gameId, difficulty, amount: streakBonusSp, source: 'session_streak_bonus' });
     markSessionBonusGranted(sessionStreak);
 
-    earnedSp += SESSION_STREAK_BONUS_SP;
+    earnedSp += streakBonusSp;
     const earnedXpWithBonus = earnedXp + SESSION_STREAK_BONUS_XP;
     streakBonus = {
       granted: true,
       xp: SESSION_STREAK_BONUS_XP,
-      sp: SESSION_STREAK_BONUS_SP,
+      sp: streakBonusSp,
       milestone: sessionStreak,
     };
 
@@ -305,7 +318,7 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
       mode,
       sessionStreak,
       bonusXp: SESSION_STREAK_BONUS_XP,
-      bonusSp: SESSION_STREAK_BONUS_SP,
+      bonusSp: streakBonusSp,
     });
     void trackStreakBonus({
       gameId,
@@ -313,7 +326,7 @@ export async function completeGameSession(input: CompleteGameSessionInput): Prom
       mode,
       sessionStreak,
       bonusXp: SESSION_STREAK_BONUS_XP,
-      bonusNeuroCoins: SESSION_STREAK_BONUS_SP,
+      bonusNeuroCoins: streakBonusSp,
     });
 
     const rewardChest = await progressRewardChest(gameId);

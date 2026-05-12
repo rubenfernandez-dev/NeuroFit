@@ -266,6 +266,46 @@ export async function getUserRankInWeeklyLeaderboard(params: {
   return board.find((entry) => entry.isUser)?.rank ?? board.length;
 }
 
+export async function generateHistoricalLeaderboard(params: {
+  userXpTotal: number;
+  userName?: string;
+  size?: number;
+}): Promise<LeaderboardEntry[]> {
+  const { userXpTotal, userName = 'Tú', size } = params;
+  const requestedSize = typeof size === 'number' ? Math.floor(size) : 50;
+  const safeSize = clamp(requestedSize, 2, 200);
+  const seed = hashString('historical:global:v1');
+  const rng = createSeededRng(seed);
+
+  const bots = Array.from({ length: safeSize - 1 }).map((_, index) => {
+    const percentile = safeSize > 1 ? index / (safeSize - 1) : 0;
+    const eased = 1 - percentile ** 1.7;
+    const baseline = Math.round(220 + eased * 4200 + randomInt(-90, 90, rng));
+    return {
+      rank: 0,
+      name: makeBotName(index + 1, rng),
+      seasonPoints: Math.max(0, baseline),
+      isUser: false,
+    };
+  });
+
+  return [
+    ...bots,
+    {
+      rank: 0,
+      name: userName,
+      seasonPoints: Math.max(0, Math.floor(userXpTotal)),
+      isUser: true,
+    },
+  ]
+    .sort((a, b) => {
+      if (b.seasonPoints !== a.seasonPoints) return b.seasonPoints - a.seasonPoints;
+      if (a.isUser !== b.isUser) return a.isUser ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    })
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+}
+
 // Debug helper retained for manual balancing/tuning during development.
 export async function debugWeeklyLeaderboardBands(seasonId = currentSeasonId()) {
   const [bronze, diamond] = await Promise.all([

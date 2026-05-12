@@ -20,6 +20,7 @@ export type NeuroMetrics = {
 export type Profile = {
   themePreference: ThemePreference;
   xpTotal: number;
+  xpWeekly: number;
   levelId: string;
   lastActiveISO: string;
   streakCurrent: number;
@@ -35,7 +36,8 @@ export type Profile = {
     finalRank: number;
     leagueBefore: LeagueId;
     leagueAfter: LeagueId;
-    spFinal: number;
+    xpWeeklyFinal: number;
+    spFinal?: number;
   };
   lastWeekResultShownSeasonId?: string;
   preferredDifficultyByGame: Record<GameId, Difficulty>;
@@ -52,6 +54,7 @@ function normalizeLeagueId(value: unknown, fallback: LeagueId): LeagueId {
 const defaultProfile: Profile = {
   themePreference: 'system',
   xpTotal: 0,
+  xpWeekly: 0,
   levelId: getLevelByXp(0).id,
   lastActiveISO: nowISO(),
   streakCurrent: 0,
@@ -94,6 +97,8 @@ export async function getProfile(): Promise<Profile> {
     const normalized: Profile = {
       ...defaultProfile,
       ...parsed,
+      xpTotal: typeof parsed.xpTotal === 'number' ? Math.max(0, Math.floor(parsed.xpTotal)) : 0,
+      xpWeekly: typeof parsed.xpWeekly === 'number' ? Math.max(0, Math.floor(parsed.xpWeekly)) : 0,
       seasonId: typeof parsed.seasonId === 'string' ? parsed.seasonId : defaultProfile.seasonId,
       seasonPoints: typeof parsed.seasonPoints === 'number' ? Math.max(0, Math.floor(parsed.seasonPoints)) : 0,
       leagueId: normalizeLeagueId(parsed.leagueId, defaultProfile.leagueId),
@@ -133,7 +138,7 @@ export async function ensureSeasonCurrent(): Promise<Profile> {
   const finalRank = await getUserRankInWeeklyLeaderboard({
     seasonId: profile.seasonId,
     leagueId: profile.leagueId,
-    userSeasonPoints: profile.seasonPoints,
+    userSeasonPoints: profile.xpWeekly,
   });
 
   let leagueAfter = profile.leagueId;
@@ -153,12 +158,13 @@ export async function ensureSeasonCurrent(): Promise<Profile> {
     finalRank,
     leagueBefore: profile.leagueId,
     leagueAfter,
-    spFinal: profile.seasonPoints,
+    xpWeeklyFinal: profile.xpWeekly,
+    spFinal: profile.xpWeekly,
   };
 
   return updateProfile({
     seasonId: season,
-    seasonPoints: 0,
+    xpWeekly: 0,
     leagueId: leagueAfter,
     bestLeagueId,
     lastWeekResult,
@@ -175,7 +181,7 @@ export async function markLastWeekResultShown(seasonIdPrev: string): Promise<Pro
 export async function resetSeasonProgress(): Promise<Profile> {
   return updateProfile({
     seasonId: currentSeasonId(),
-    seasonPoints: 0,
+    xpWeekly: 0,
     leagueId: 'bronze',
     lastWeekResult: undefined,
     lastWeekResultShownSeasonId: undefined,

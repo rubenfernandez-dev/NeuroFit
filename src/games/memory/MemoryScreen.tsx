@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -48,6 +48,7 @@ type ResultSummary = {
 
 export default function MemoryScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  const { width } = useWindowDimensions();
   useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'principiante') as Difficulty;
@@ -85,7 +86,11 @@ export default function MemoryScreen({ route, navigation }: Props) {
   const MAX_REVEAL_PAIR_USES = 3;
 
   const memoryConfig = useMemo(() => getMemoryDifficultyConfig(difficulty), [difficulty]);
-  const { cols } = memoryConfig;
+  const { cols, rows } = memoryConfig;
+  const cardGap = cols >= 7 ? 5 : 7;
+  const boardWidth = Math.min(width - 24, 430);
+  const cardSize = Math.floor((boardWidth - cardGap * (cols - 1)) / cols);
+  const boardHeight = Math.max(160, Math.floor((Math.max(28, cardSize) * 1.22 + cardGap) * rows));
 
   const clearPreviewTimer = () => {
     if (previewTimerRef.current) {
@@ -477,7 +482,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
 
   return (
     <>
-    <Screen scroll={false}>
+    <Screen scroll={false} contentStyle={{ flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}>
       <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
       <Card
         variant="cyan"
@@ -546,7 +551,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
       ) : null}
 
       {!dailyBlockedReason ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: cardGap, justifyContent: 'center', minHeight: boardHeight }}>
         {cards.map((card, index) => (
           <MemoryCard
             key={card.id}
@@ -554,6 +559,7 @@ export default function MemoryScreen({ route, navigation }: Props) {
             isFaceUp={previewActive || revealAllActive || flipped.includes(index)}
             isMatched={matched.includes(index)}
             onPress={() => onCardPress(index)}
+            size={cardSize}
           />
         ))}
         </View>

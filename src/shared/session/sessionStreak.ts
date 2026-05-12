@@ -22,7 +22,9 @@ export function resetSessionStreak(): number {
 
 export function shouldGrantSessionBonus(streak: number = sessionStreak): boolean {
   if (streak <= 0) return false;
-  if (streak % SESSION_STREAK_MILESTONE !== 0) return false;
+  const isThreeMilestone = streak % SESSION_STREAK_MILESTONE === 0;
+  const isFiveMilestone = streak % 5 === 0;
+  if (!isThreeMilestone && !isFiveMilestone) return false;
   return !grantedMilestones.has(streak);
 }
 

@@ -291,6 +291,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
 
     const elapsedMs = Math.max(0, (config.durationSec - timeLeft) * 1000);
     const totalAnswers = correct + mistakes;
+    const roundsPlayed = Math.max(0, round - 1);
     const accuracyPct = Math.round((correct / Math.max(1, totalAnswers)) * 100);
     const rewardScore = computeSpeedMatchRewardScore({
       correct,
@@ -298,7 +299,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
       elapsedSec: Math.max(1, Math.round(elapsedMs / 1000)),
       difficulty,
     });
-    const won = evaluateSpeedMatchWin({ correct, mistakes, difficulty });
+    const won = evaluateSpeedMatchWin({ roundsPlayed, mistakes, difficulty });
     const rewardMultiplier = won ? 1 : correct === 0 ? 0 : 0.5;
 
     if (won) {
@@ -379,7 +380,7 @@ export default function SpeedMatchScreen({ route, navigation }: Props) {
   }, [timeLeft, didFinish]);
 
   useEffect(() => {
-    if (!didFinish && mistakes >= config.maxMistakes) {
+    if (!didFinish && mistakes > config.maxMistakes) {
       finishSession();
     }
   }, [config.maxMistakes, didFinish, mistakes]);

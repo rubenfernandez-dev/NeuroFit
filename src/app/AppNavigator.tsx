@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { NavigationContainer, DefaultTheme, DarkTheme, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { isGameRouteName, RootStackParamList } from './routes';
-import { DailyChallengeScreen, GamesScreen, HomeScreen, LeaderboardScreen, ProgressScreen, SettingsScreen } from '../screens';
+import { DailyChallengeScreen, GamesScreen, HistoricalLeaderboardScreen, HomeScreen, LeaderboardScreen, ProgressScreen, SettingsScreen } from '../screens';
 import { SudokuScreen } from '../games/sudoku';
 import { MemoryScreen } from '../games/memory';
 import { MentalMathScreen } from '../games/mentalmath';
@@ -89,6 +89,7 @@ export default function AppNavigator() {
         <Stack.Screen name="Games" component={GamesScreen} options={{ title: 'Juegos' }} />
         <Stack.Screen name="DailyChallenge" component={DailyChallengeScreen} options={{ title: 'Reto diario' }} />
         <Stack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ title: 'Ranking local semanal' }} />
+        <Stack.Screen name="HistoricalLeaderboard" component={HistoricalLeaderboardScreen} options={{ title: 'Ranking histórico local' }} />
         <Stack.Screen name="Progress" component={ProgressScreen} options={{ title: 'Progreso' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Ajustes' }} />
         <Stack.Screen name="Sudoku" component={SudokuScreen} options={{ title: 'Sudoku' }} />

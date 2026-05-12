@@ -16,8 +16,6 @@ import { ensureDailyToday, getDailyProgress } from '../shared/storage/daily';
 import { generateWeeklyLeaderboard } from '../shared/leaderboard/leaderboard';
 import { captureException, classifyDataFailure, formatLoadFailureMessage } from '../shared/observability';
 import { getCategoryColors } from '../shared/theme/categoryColors';
-import StreakWidget from '../shared/ui/StreakWidget';
-import AnimatedProgressBar from '../shared/ui/AnimatedProgressBar';
 import { formatNeuroCoins } from '../shared/economy/neuroCoins';
 import PlayerEconomyBar from '../shared/economy/PlayerEconomyBar';
 import GameResultModal from '../shared/feedback/GameResultModal';
@@ -32,7 +30,8 @@ export default function HomeScreen({ navigation }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [xpTotal, setXpTotal] = useState(0);
-  const [seasonPoints, setSeasonPoints] = useState(0);
+  const [xpWeekly, setXpWeekly] = useState(0);
+  const [neuroCoins, setNeuroCoins] = useState(0);
   const [leagueId, setLeagueId] = useState<'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'master' | 'grand_master' | 'legend'>('bronze');
   const [streakCurrent, setStreakCurrent] = useState(0);
   const [streakBest, setStreakBest] = useState(0);
@@ -40,8 +39,8 @@ export default function HomeScreen({ navigation }: Props) {
   const [dailyCompleted, setDailyCompleted] = useState(false);
   const [dailyProgress, setDailyProgress] = useState('0/3');
   const [userRank, setUserRank] = useState(50);
-  const [spToTop10, setSpToTop10] = useState(0);
-  const [spToSafety, setSpToSafety] = useState(0);
+  const [xpToTop10, setXpToTop10] = useState(0);
+  const [xpToSafety, setXpToSafety] = useState(0);
   const [neuroScore, setNeuroScore] = useState({ speed: 0, memory: 0, logic: 0, attention: 0 });
 
   useFocusEffect(
@@ -54,7 +53,7 @@ export default function HomeScreen({ navigation }: Props) {
             generateWeeklyLeaderboard({
               seasonId: profile.seasonId,
               leagueId: profile.leagueId,
-              userSeasonPoints: profile.seasonPoints,
+              userSeasonPoints: profile.xpWeekly,
               userName: 'Tú',
               size: 50,
             }),
@@ -62,18 +61,19 @@ export default function HomeScreen({ navigation }: Props) {
 
           const progress = getDailyProgress(daily);
           const me = board.find((entry) => entry.isUser);
-          const top10Cut = board.find((entry) => entry.rank === 10)?.seasonPoints ?? profile.seasonPoints;
-          const safetyCut = board.find((entry) => entry.rank === 40)?.seasonPoints ?? profile.seasonPoints;
+          const top10Cut = board.find((entry) => entry.rank === 10)?.seasonPoints ?? profile.xpWeekly;
+          const safetyCut = board.find((entry) => entry.rank === 40)?.seasonPoints ?? profile.xpWeekly;
 
           setDailyCompleted(daily.completed);
           setDailyProgress(`${progress.completedStages}/${progress.totalStages}`);
           setUserRank(me?.rank ?? 50);
-          setSpToTop10(Math.max(0, top10Cut - profile.xpTotal + 1));
-          setSpToSafety(Math.max(0, safetyCut - profile.xpTotal + 1));
+          setXpToTop10(Math.max(0, top10Cut - profile.xpWeekly + 1));
+          setXpToSafety(Math.max(0, safetyCut - profile.xpWeekly + 1));
           setNeuroScore(profile.neuro);
 
           setXpTotal(profile.xpTotal);
-          setSeasonPoints(profile.seasonPoints);
+          setXpWeekly(profile.xpWeekly);
+          setNeuroCoins(profile.seasonPoints);
           setLeagueId(profile.leagueId);
           setStreakCurrent(profile.streakCurrent);
           setStreakBest(profile.streakBest);
@@ -114,7 +114,7 @@ export default function HomeScreen({ navigation }: Props) {
                 : leagueId === 'grand_master'
                   ? '#F97316'
                   : '#A78BFA';
-  const top10Progress = spToTop10 > 0 ? Math.max(0, Math.min(1, seasonPoints / (seasonPoints + spToTop10))) : 1;
+  const top10Progress = xpToTop10 > 0 ? Math.max(0, Math.min(1, xpWeekly / (xpWeekly + xpToTop10))) : 1;
 
   const closeWeeklyResult = async () => {
     if (!weeklyResult) return;
@@ -165,7 +165,7 @@ export default function HomeScreen({ navigation }: Props) {
 
         <PlayerEconomyBar
           xp={xpTotal}
-          neuroCoins={seasonPoints}
+          neuroCoins={neuroCoins}
           middleLabel={`${league.badgeEmoji} ${league.name}`}
           middleColor={leagueAccent}
         />
@@ -178,8 +178,6 @@ export default function HomeScreen({ navigation }: Props) {
             </View>
           </Card>
         ) : null}
-        <StreakWidget current={streakCurrent} best={streakBest} />
-
         <Card variant="primary">
           <Text style={[theme.typography.h2, { color: theme.colors.text }]}>NeuroScore</Text>
           <Text style={[theme.typography.caption, { color: theme.colors.muted, marginTop: 4 }]}>Calculado con tus partidas</Text>
@@ -208,39 +206,49 @@ export default function HomeScreen({ navigation }: Props) {
         <PrimaryButton title="Jugar ahora" onPress={() => navigation.navigate('Games')} />
 
         <Card
-          variant="success"
           style={{
-            borderColor: dailyCompleted ? `${theme.colors.green}AA` : `${theme.colors.pink}AA`,
+            borderColor: theme.colors.primary,
             borderWidth: 2,
-            backgroundColor: theme.mode === 'dark' ? theme.colors.bg1 : dailyCompleted ? `${theme.colors.green}12` : `${theme.colors.pink}12`,
-            shadowColor: dailyCompleted ? theme.colors.green : theme.colors.pink,
-            shadowOpacity: 0.18,
+            backgroundColor: theme.colors.primary,
+            shadowColor: theme.colors.primary,
+            shadowOpacity: 0.22,
             shadowRadius: 14,
             shadowOffset: { width: 0, height: 8 },
             elevation: 4,
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-            <Text style={[theme.typography.h3, { color: theme.colors.text }]}>{dailyCompleted ? '✅ Reto diario' : '🎯 Reto diario'}</Text>
-            <Pill label={dailyCompleted ? 'Completado' : 'Destacado'} tone={dailyCompleted ? 'success' : 'pink'} />
+            <Text style={[theme.typography.h3, { color: '#FFFFFF' }]}>{dailyCompleted ? '✅ Reto diario' : '🎯 Reto diario'}</Text>
+            <Pill label={`Racha ${streakCurrent} · Max ${streakBest}`} tone="warning" />
           </View>
-          <Text style={[theme.typography.bodySmall, { color: theme.colors.muted, marginTop: 6 }]}>
+          <Text style={[theme.typography.bodySmall, { color: '#FFFFFF', marginTop: 6 }]}>
             {dailyCompleted
               ? `Completado por hoy (${dailyProgress}). ¡Gran trabajo!`
               : `Progreso ${dailyProgress}. Completa el circuito para reclamar XP extra.`}
           </Text>
+          <View style={{ marginTop: 10 }}>
+            <Text style={[theme.typography.caption, { color: '#DBEAFE' }]}>Ranking semanal actual: #{userRank}</Text>
+            <Text style={[theme.typography.caption, { color: '#DBEAFE', marginTop: 2 }]}>Te faltan {xpToTop10} XP para Top 10 · {xpToSafety} XP para zona segura</Text>
+          </View>
+          <View style={{ marginTop: 10 }}>
+            <ProgressBar value={top10Progress} color="#FDBA74" />
+          </View>
           <View style={{ marginTop: 12 }}>
             <Button
               title={dailyCompleted ? '✅ Completado' : 'Iniciar reto diario'}
               variant={dailyCompleted ? 'secondary' : 'primary'}
               onPress={() => navigation.navigate('DailyChallenge')}
-              style={dailyCompleted ? { borderColor: theme.colors.green } : undefined}
+              style={
+                dailyCompleted
+                  ? { borderColor: '#FDBA74' }
+                  : { backgroundColor: '#F97316', borderColor: '#EA580C' }
+              }
             />
           </View>
         </Card>
 
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Pressable onPress={() => navigation.navigate('Leaderboard')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          <Pressable onPress={() => navigation.navigate('Leaderboard')} style={({ pressed }) => [{ width: '48%', transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
             <Card
               style={{
                 minHeight: 118,
@@ -252,10 +260,25 @@ export default function HomeScreen({ navigation }: Props) {
               }}
             >
               <Text style={{ fontSize: 24 }}>🥇</Text>
-              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Ranking</Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Ranking semanal</Text>
             </Card>
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('Progress')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+          <Pressable onPress={() => navigation.navigate('HistoricalLeaderboard')} style={({ pressed }) => [{ width: '48%', transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+            <Card
+              style={{
+                minHeight: 118,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1.5,
+                borderColor: 'rgba(245,158,11,0.55)',
+                backgroundColor: theme.mode === 'dark' ? 'rgba(120,53,15,0.35)' : 'rgba(255,237,213,0.88)',
+              }}
+            >
+              <Text style={{ fontSize: 24 }}>🏛️</Text>
+              <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Ranking historico</Text>
+            </Card>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate('Progress')} style={({ pressed }) => [{ width: '48%', transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
             <Card
               style={{
                 minHeight: 118,
@@ -270,7 +293,7 @@ export default function HomeScreen({ navigation }: Props) {
               <Text style={[theme.typography.bodySmall, { color: theme.colors.text, marginTop: 8, fontWeight: '800' }]}>Progreso</Text>
             </Card>
           </Pressable>
-          <Pressable onPress={() => navigation.navigate('Settings')} style={({ pressed }) => [{ flex: 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
+          <Pressable onPress={() => navigation.navigate('Settings')} style={({ pressed }) => [{ width: '48%', transform: [{ scale: pressed ? 0.98 : 1 }] }]}>
             <Card
               style={{
                 minHeight: 118,
@@ -301,7 +324,7 @@ export default function HomeScreen({ navigation }: Props) {
             value: `${weeklyResult ? getLeagueById(weeklyResult.leagueBefore).name : '-'} → ${weeklyResult ? getLeagueById(weeklyResult.leagueAfter).name : '-'}`,
           },
           { label: 'Puesto final', value: `${weeklyResult?.finalRank ?? '-'} / 50` },
-          { label: 'NeuroCoins de la semana', value: formatNeuroCoins(weeklyResult?.spFinal ?? 0) },
+          { label: 'XP semanal final', value: formatNeuroCoins(weeklyResult?.xpWeeklyFinal ?? weeklyResult?.spFinal ?? 0) },
         ]}
         primaryAction={{ label: 'Continuar', onPress: closeWeeklyResult }}
         leaguePromotion={weeklyLeagueOutcome === 'promotion'}

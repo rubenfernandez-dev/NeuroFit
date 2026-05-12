@@ -7,17 +7,20 @@ type MemoryCardProps = {
   isFaceUp: boolean;
   isMatched: boolean;
   onPress: () => void;
+  size?: number;
 };
 
-export default function MemoryCard({ emoji, isFaceUp, isMatched, onPress }: MemoryCardProps) {
+export default function MemoryCard({ emoji, isFaceUp, isMatched, onPress, size = 46 }: MemoryCardProps) {
   const { theme } = useAppTheme();
+  const width = Math.max(28, Math.floor(size));
+  const height = Math.max(34, Math.floor(width * 1.22));
   return (
     <Pressable
       onPress={onPress}
       disabled={isMatched || isFaceUp}
       style={{
-        width: 46,
-        height: 58,
+        width,
+        height,
         borderRadius: 14,
         borderWidth: 1,
         borderColor: theme.colors.border,
@@ -27,7 +30,7 @@ export default function MemoryCard({ emoji, isFaceUp, isMatched, onPress }: Memo
         ...theme.shadow(isFaceUp || isMatched ? 1 : 2),
       }}
     >
-      <Text style={{ fontSize: 24 }}>{isFaceUp || isMatched ? emoji : '•'}</Text>
+      <Text style={{ fontSize: Math.max(16, Math.floor(width * 0.52)) }}>{isFaceUp || isMatched ? emoji : '•'}</Text>
     </Pressable>
   );
 }

@@ -18,11 +18,11 @@ const symbols = ['🐶', '🐱', '🦊', '🐼', '🐸', '🐵', '🦁', '🐰',
 
 const MEMORY_CONFIG_BY_DIFFICULTY: Record<Difficulty, MemoryDifficultyConfig> = {
   // Curva monotónica por tamaño + presión de memoria por preview decreciente.
-  principiante: { cols: 4, rows: 4, previewTimeMs: 1800, mismatchLockMs: 0 },
-  avanzado: { cols: 5, rows: 4, previewTimeMs: 1400, mismatchLockMs: 350 },
-  experto: { cols: 6, rows: 4, previewTimeMs: 1000, mismatchLockMs: 500 },
-  maestro: { cols: 6, rows: 6, previewTimeMs: 650, mismatchLockMs: 700 },
-  gran_maestro: { cols: 8, rows: 6, previewTimeMs: 280, mismatchLockMs: 980 },
+  principiante: { cols: 4, rows: 4, previewTimeMs: 2800, mismatchLockMs: 0 },
+  avanzado: { cols: 5, rows: 4, previewTimeMs: 2400, mismatchLockMs: 350 },
+  experto: { cols: 6, rows: 4, previewTimeMs: 2000, mismatchLockMs: 500 },
+  maestro: { cols: 6, rows: 6, previewTimeMs: 1650, mismatchLockMs: 700 },
+  gran_maestro: { cols: 8, rows: 6, previewTimeMs: 1280, mismatchLockMs: 980 },
 };
 
 export function getMemoryDifficultyConfig(difficulty: Difficulty): MemoryDifficultyConfig {

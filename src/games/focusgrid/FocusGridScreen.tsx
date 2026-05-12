@@ -496,15 +496,15 @@ export default function FocusGridScreen({ route, navigation }: Props) {
 
   const accuracy = calcAccuracy(correctTaps, totalTaps);
   const gridGap = config.gridSize >= 6 ? 4 : 6;
-  const gridMaxWidth = Math.min(width - 34, 420);
+  const gridMaxWidth = Math.min(width - 30, 380);
   const tileSize = Math.max(
-    config.gridSize >= 7 ? 34 : 40,
+    config.gridSize >= 7 ? 28 : 34,
     Math.floor((gridMaxWidth - gridGap * (config.gridSize - 1)) / config.gridSize),
   );
 
   return (
     <>
-      <Screen scroll={false}>
+      <Screen scroll={false} contentStyle={{ flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card
           variant="primary"
@@ -519,20 +519,15 @@ export default function FocusGridScreen({ route, navigation }: Props) {
             elevation: 3,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-            <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Focus Grid · {difficultyLabel(difficulty)}</Text>
-            <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.totalSeconds} compact align="right" />
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+            <Text style={[theme.typography.h3, { color: theme.colors.text, flexShrink: 1 }]}>Focus Grid · {difficultyLabel(difficulty)} · ❌ {mistakes} · 🎯 {accuracy}%</Text>
+            <View style={{ width: 92, alignItems: 'center' }}>
+              <TimerDisplay timeLeft={timeLeft} showAlarmIn={5} maxTime={config.totalSeconds} compact align="center" />
+            </View>
           </View>
           <View style={{ marginTop: 8 }}>
             {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
           </View>
-          <View style={{ alignItems: 'center', marginTop: 8 }}>
-            <Text style={{ color: theme.colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' }}>Siguiente</Text>
-            <Text style={{ color: theme.colors.text, fontSize: 42, fontWeight: '900', lineHeight: 46 }}>{Math.min(nextExpected, totalCells)}</Text>
-          </View>
-          <Text style={{ color: theme.colors.textMuted, marginTop: 4, fontSize: 12 }}>
-            Fallos: {mistakes} · Precisión: {accuracy}%
-          </Text>
         </Card>
 
         {!dailyBlockedReason ? (
@@ -577,15 +572,10 @@ export default function FocusGridScreen({ route, navigation }: Props) {
         ) : null}
 
         {!dailyBlockedReason ? (
-          <Card variant="cyan">
+          <Card variant="cyan" style={{ paddingBottom: 6 }}>
             <Text style={[theme.typography.bodySmall, { color: theme.colors.textMuted, textAlign: 'center' }]}>
-              Toca los números en orden ascendente lo más rápido posible.
+              Toca los números en orden ascendente
             </Text>
-            {phase === 'playing' ? (
-              <Text style={[theme.typography.body, { color: theme.colors.text, textAlign: 'center', marginTop: 6 }]}>
-                {`Siguiente: ${Math.min(nextExpected, totalCells)}`}
-              </Text>
-            ) : null}
 
             <FocusGridBoard
               numbers={numbers}

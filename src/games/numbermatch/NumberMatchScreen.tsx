@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { normalizeGameRouteParams, RootStackParamList } from '../../app/routes';
 import { difficultyLabel, Difficulty, normalizeDifficulty } from '../types';
@@ -102,6 +102,7 @@ function getSessionSeed(isDaily: boolean, dailySeed?: number): number {
 
 export default function NumberMatchScreen({ route, navigation }: Props) {
   const { theme } = useAppTheme();
+  const { width } = useWindowDimensions();
   useGameBackToGames(navigation);
   const gameRoute = normalizeGameRouteParams(route.params);
   const difficulty = normalizeDifficulty(gameRoute.difficulty, 'avanzado') as Difficulty;
@@ -666,10 +667,12 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
   }, [addLine, dailyBlockedReason, didFinish, finishing, phase, showNeuroCoinError, showNeuroCoinSpendFeedback]);
 
   const boardClearedPercent = computeBoardClearedPercent(board);
+  const boardMaxWidth = Math.min(width - 32, 360);
+  const cellSize = Math.max(30, Math.floor((boardMaxWidth - config.cols * 4) / config.cols));
 
   return (
     <>
-      <Screen scroll={false}>
+      <Screen scroll={false} contentStyle={{ flex: 1, paddingHorizontal: 12, paddingVertical: 10, gap: 8 }}>
         <PlayerEconomyBar compact xp={xpTotal} neuroCoins={neuroCoins} />
         <Card
           variant="primary"
@@ -684,28 +687,28 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
             elevation: 3,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', gap: 10 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'stretch', justifyContent: 'space-between', gap: 8 }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={[theme.typography.h3, { color: theme.colors.text }]}>Number Match · {difficultyLabel(difficulty)}</Text>
-              <View style={{ marginTop: 8 }}>
+              <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 20, marginTop: 4 }}>⏱ {msToClock(elapsedSec * 1000)}</Text>
+              <View style={{ marginTop: 4 }}>
                 {isDaily ? <Text style={{ color: theme.colors.warning, fontWeight: '700' }}>Reto diario</Text> : null}
               </View>
             </View>
             <View
               style={{
-                width: 118,
+                width: 96,
                 borderWidth: 1,
                 borderColor: 'rgba(148,163,184,0.30)',
                 borderRadius: 14,
                 backgroundColor: theme.mode === 'dark' ? 'rgba(15,23,42,0.44)' : 'rgba(241,245,249,0.90)',
-                paddingHorizontal: 8,
+                paddingHorizontal: 6,
                 paddingVertical: 6,
                 justifyContent: 'space-between',
               }}
             >
-              <Text style={{ color: theme.colors.text, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>⏱ {msToClock(elapsedSec * 1000)}</Text>
-              <Text style={{ color: '#22C55E', fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center', marginTop: 2 }}>✅ {validMatches}</Text>
-              <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 24, lineHeight: 28, textAlign: 'center' }}>❌ {invalidMatches}</Text>
+              <Text style={{ color: '#22C55E', fontWeight: '800', fontSize: 20, lineHeight: 24, textAlign: 'center', marginTop: 2 }}>✅ {validMatches}</Text>
+              <Text style={{ color: theme.colors.textMuted, fontWeight: '800', fontSize: 20, lineHeight: 24, textAlign: 'center' }}>❌ {invalidMatches}</Text>
             </View>
           </View>
         </Card>
@@ -725,7 +728,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
               Empareja numeros iguales o que sumen 10. Se permite conexion por fila, columna, diagonal y continuidad visual entre lineas.
             </Text>
 
-            <View style={{ marginTop: 12, alignSelf: 'center' }}>
+            <View style={{ marginTop: 10, alignSelf: 'center', width: boardMaxWidth }}>
               {Array.from({ length: config.rows }).map((_, row) => (
                 <View key={`row-${row}`} style={{ flexDirection: 'row' }}>
                   {Array.from({ length: config.cols }).map((__, col) => {
@@ -740,8 +743,8 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
                         key={`cell-${index}`}
                         onPress={() => handleCellPress(index)}
                         style={{
-                          width: 38,
-                          height: 38,
+                          width: cellSize,
+                          height: cellSize,
                           margin: 2,
                           borderRadius: 8,
                           alignItems: 'center',
@@ -766,7 +769,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
                           opacity: value === null ? 0.4 : 1,
                         }}
                       >
-                        <Text style={[theme.typography.body, { color: value === null ? theme.colors.textMuted : theme.colors.text }]}>
+                        <Text style={[theme.typography.body, { color: value === null ? theme.colors.textMuted : theme.colors.text, fontSize: Math.max(14, Math.floor(cellSize * 0.45)) }]}>
                           {value === null ? '' : value}
                         </Text>
                       </Pressable>
@@ -826,7 +829,7 @@ export default function NumberMatchScreen({ route, navigation }: Props) {
           </View>
         ) : null}
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 'auto' }}>
           <Button title="Reintentar" variant="ghost" onPress={restart} disabled={isDaily || !!dailyBlockedReason} style={{ flex: 1 }} />
           <Button title="Salir" variant="secondary" onPress={exitGame} style={{ flex: 1 }} />
         </View>

@@ -26,9 +26,12 @@ type RewardChoice = {
 };
 
 const REWARD_POOL: RewardChoice[] = [
-  { rewardType: 'neurocoins', amount: 10 },
-  { rewardType: 'neurocoins', amount: 20 },
-  { rewardType: 'xp', amount: 20 },
+  { rewardType: 'neurocoins', amount: 50 },
+  { rewardType: 'neurocoins', amount: 60 },
+  { rewardType: 'neurocoins', amount: 70 },
+  { rewardType: 'neurocoins', amount: 80 },
+  { rewardType: 'neurocoins', amount: 90 },
+  { rewardType: 'neurocoins', amount: 100 },
 ];
 
 function clampGamesPlayed(value: unknown): number {

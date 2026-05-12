@@ -95,6 +95,7 @@ export function initCrashReporting() {
       debug: __DEV__,
       environment: process.env.EXPO_PUBLIC_APP_ENV ?? (__DEV__ ? 'development' : 'production'),
       tracesSampleRate: 0,
+      enableNative: false, // Native integration disabled — JS-only error capture
     });
     sentryInitialized = true;
     return true;
