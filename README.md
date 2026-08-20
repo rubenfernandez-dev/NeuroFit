@@ -1,5 +1,26 @@
 # NeuroFit
 
+**Mobile cognitive training app built with React Native, Expo and TypeScript.**
+
+**Current status:** active development / release preparation.
+
+**Key facts:**
+
+- Expo 55, React Native 0.83, TypeScript
+- 7 cognitive games
+- Daily Challenge (3-stage circuit)
+- Local-first architecture — no backend
+- Expo Secure Store for local persistence
+- Notifications
+- Vitest for domain testing
+- Android / iOS focus
+
+No backend currently exists (no auth, no cloud sync, no multi-device). The weekly leaderboard is simulated locally — there is no real global multiplayer leaderboard.
+
+Full technical documentation (in Spanish) follows below for contributors working in this codebase.
+
+---
+
 NeuroFit es una app móvil de entrenamiento cognitivo construida con Expo + React Native + TypeScript.
 
 Objetivo del proyecto: ofrecer sesiones cortas de juegos mentales con progresión, reto diario por etapas y gamificación local.
@@ -54,58 +75,58 @@ Patrones activos:
 
 ```txt
 src/
-  app/
-    AppNavigator.tsx
-    routes.ts
+app/
+AppNavigator.tsx
+routes.ts
 
-  screens/
-    HomeScreen.tsx
-    GamesScreen.tsx
-    DailyChallengeScreen.tsx
-    LeaderboardScreen.tsx
-    ProgressScreen.tsx
-    SettingsScreen.tsx
+screens/
+HomeScreen.tsx
+GamesScreen.tsx
+DailyChallengeScreen.tsx
+LeaderboardScreen.tsx
+ProgressScreen.tsx
+SettingsScreen.tsx
 
-  core/
-    gamification/
-      economy.ts
-      neuroscore.ts
+core/
+gamification/
+economy.ts
+neuroscore.ts
 
-  games/
-    registry.ts
-    types.ts
-    sudoku/
-    memory/
-    mentalmath/
-    speedmatch/
-    patternmemory/
-    focusgrid/
-    numbermatch/
-    storage/
-      persistence.ts
+games/
+registry.ts
+types.ts
+sudoku/
+memory/
+mentalmath/
+speedmatch/
+patternmemory/
+focusgrid/
+numbermatch/
+storage/
+persistence.ts
 
-  shared/
-    gamification/
-      levels.ts
-      leagues.ts
-      seasonPoints.ts
-      streak.ts
-      xp.ts
-      sessionCompletion.ts
-    leaderboard/
-      leaderboard.ts
-    notifications/
-      notifications.ts
-    storage/
-      profile.ts
-      stats.ts
-      daily.ts
-      notifications.ts
-      secureStore.ts
-      keys.ts
-    ui/
-    theme/
-    utils/
+shared/
+gamification/
+levels.ts
+leagues.ts
+seasonPoints.ts
+streak.ts
+xp.ts
+sessionCompletion.ts
+leaderboard/
+leaderboard.ts
+notifications/
+notifications.ts
+storage/
+profile.ts
+stats.ts
+daily.ts
+notifications.ts
+secureStore.ts
+keys.ts
+ui/
+theme/
+utils/
 ```
 
 ## Juegos Disponibles
@@ -146,9 +167,9 @@ Cómo funciona hoy:
 - Cada etapa se marca con `markDailyStageStarted()` y se completa con `completeDailyStage()`.
 - Al cerrar una partida, cada juego delega en `completeGameSession()`.
 - Cuando se completa la etapa 3:
-  - se marca circuito completo,
-  - se aplica streak,
-  - se intenta reclamar recompensa diaria una sola vez (`claimDailyReward`).
+- se marca circuito completo,
+- se aplica streak,
+- se intenta reclamar recompensa diaria una sola vez (`claimDailyReward`).
 
 Robustez implementada:
 
@@ -160,9 +181,9 @@ Robustez implementada:
 Componentes principales:
 
 - XP/SP: `src/core/gamification/economy.ts`
-  - cálculo por score normalizado,
-  - multiplicador por dificultad,
-  - bono fijo diario.
+- cálculo por score normalizado,
+- multiplicador por dificultad,
+- bono fijo diario.
 - Niveles: `src/shared/gamification/levels.ts`.
 - Ligas/temporada: `src/shared/gamification/leagues.ts` + `profile.ts`.
 - NeuroScore: `src/core/gamification/neuroscore.ts` (dimensiones speed/memory/logic/attention).
@@ -284,7 +305,7 @@ Nota tecnica sobre manifest y backup rules:
 
 1. Definir y publicar URL final de politica de privacidad (legal revisada).
 2. Confirmar decision de Sentry en produccion:
-  - si se activa, revisar scrubbing/retencion/accesos.
+- si se activa, revisar scrubbing/retencion/accesos.
 3. Generar AAB release firmado y verificar manifest final de release.
 4. Completar Data Safety de Play Console con base en `PRIVACY.md` y artefacto final.
 5. Preparar ficha (titulo corto/largo, descripcion, screenshots, icon, feature graphic).
@@ -317,13 +338,13 @@ Limitacion tecnica abierta:
 Estas áreas están vivas en el código y conviene conocerlas al entrar:
 
 - Compatibilidad de rutas:
-  - `mode` es fuente de verdad.
-  - `isDaily` sigue soportado como legado para compatibilidad.
+- `mode` es fuente de verdad.
+- `isDaily` sigue soportado como legado para compatibilidad.
 - Hardening de persistencia:
-  - ya aplicado en `memory` y `mentalmath` mediante normalización defensiva,
-  - pendiente de extender en el resto de storages de juego.
+- ya aplicado en `memory` y `mentalmath` mediante normalización defensiva,
+- pendiente de extender en el resto de storages de juego.
 - Funciones de stats marcadas como deprecadas:
-  - se mantienen por compatibilidad (`recordSession`, `recordSudokuStarted`, `recordSudokuOutcome`).
+- se mantienen por compatibilidad (`recordSession`, `recordSudokuStarted`, `recordSudokuOutcome`).
 
 ## Limitaciones Actuales
 
